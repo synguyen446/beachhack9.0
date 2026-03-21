@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 from routes.chat import router as chat_router
+from routes.generation import router as generation_router
 from fastapi.middleware.cors import CORSMiddleware
 
 
 app = FastAPI()
 app.include_router(chat_router)
+app.include_router(generation_router)
 
 app.add_middleware(
     CORSMiddleware,

@@ -1,8 +1,8 @@
 import asyncio
 from typing import AsyncGenerator
 
-from backend.utils.doc_agents import make_doc_agents
-from backend.models.database import create_project, save_document, get_project_context
+from utils.doc_agents import make_doc_agents
+from models.database import create_project, save_document, get_project_context
 
 
 AGENT_NAMES = [
