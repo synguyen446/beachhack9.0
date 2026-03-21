@@ -1,0 +1,10 @@
+langchain
+ddgs
+langgraph
+langchain-community
+langchain-core
+langchain-ollama
+fastapi
+pydantic
+uvicorn[standard]
+aiosqlite
