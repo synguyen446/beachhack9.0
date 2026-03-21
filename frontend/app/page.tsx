@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 
 const API_URL = "http://localhost:1000";
@@ -26,6 +26,12 @@ interface GeneratedDoc {
   markdown: string;
 }
 
+interface Project {
+  id: number;
+  idea: string;
+  created_at: string;
+}
+
 export default function Home() {
   // Generation state
   const [idea, setIdea] = useState("");
@@ -42,9 +48,61 @@ export default function Home() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
 
+  // Projects state
+  const [projects, setProjects] = useState<Project[]>([]);
+
+  const fetchProjects = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/projects`);
+      const data = await res.json();
+      setProjects(data);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const loadProject = useCallback(async (id: number) => {
+    setProjectId(id);
+    setChatMessages([]);
+    setDocs([]);
+    setSelectedDoc(null);
+    setGenStatus("");
+
+    try {
+      const [chatRes, docsRes] = await Promise.all([
+        fetch(`${API_URL}/projects/${id}/chat`),
+        fetch(`${API_URL}/projects/${id}/documents`),
+      ]);
+
+      const chatData = await chatRes.json();
+      const docsData = await docsRes.json();
+
+      setChatMessages(
+        chatData.map((m: { role: string; content: string }) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        }))
+      );
+
+      const loadedDocs = docsData.map((d: { agent_name: string; markdown: string }) => ({
+        agent: d.agent_name,
+        markdown: d.markdown,
+      }));
+      setDocs(loadedDocs);
+      if (loadedDocs.length > 0) setSelectedDoc(loadedDocs[0]);
+
+      // Set the idea from the project
+      const proj = projects.find((p) => p.id === id);
+      if (proj) setIdea(proj.idea);
+    } catch {
+      // ignore
+    }
+  }, [projects]);
+
   useEffect(() => {
     setMounted(true);
-  }, []);
+    fetchProjects();
+  }, [fetchProjects]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -87,6 +145,7 @@ export default function Home() {
             const data = JSON.parse(line.slice(6));
             if (data.type === "project") {
               setProjectId(data.project_id);
+              fetchProjects();
             } else if (data.type === "status") {
               setGenStatus(data.message || `Running ${data.agent}...`);
             } else if (data.type === "result") {
@@ -193,6 +252,15 @@ export default function Home() {
     }
   }
 
+  function handleNewProject() {
+    setProjectId(null);
+    setIdea("");
+    setChatMessages([]);
+    setDocs([]);
+    setSelectedDoc(null);
+    setGenStatus("");
+  }
+
   return (
     <div className="flex flex-col h-screen bg-zinc-950 text-zinc-100">
       {/* Header */}
@@ -208,6 +276,37 @@ export default function Home() {
       <div className="flex flex-1 overflow-hidden">
         {/* Left Panel - Controls */}
         <div className="w-80 border-r border-zinc-800 flex flex-col p-4 gap-4 overflow-y-auto">
+          {/* Project Selector */}
+          <div>
+            <label className="block text-sm font-medium text-zinc-400 mb-1">
+              Projects
+            </label>
+            <button
+              onClick={handleNewProject}
+              className="w-full px-3 py-2 mb-2 rounded-lg text-sm font-semibold bg-green-600 hover:bg-green-500 transition"
+            >
+              + New Project
+            </button>
+            {projects.length > 0 && (
+              <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
+                {projects.map((proj) => (
+                  <button
+                    key={proj.id}
+                    onClick={() => loadProject(proj.id)}
+                    className={`w-full px-3 py-2 rounded-lg text-sm text-left truncate transition ${
+                      projectId === proj.id
+                        ? "bg-blue-600/20 text-blue-400 border border-blue-500/30"
+                        : "bg-zinc-900 hover:bg-zinc-800 text-zinc-300"
+                    }`}
+                    title={proj.idea}
+                  >
+                    #{proj.id} — {proj.idea}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Idea Input */}
           <div>
             <label className="block text-sm font-medium text-zinc-400 mb-1">
