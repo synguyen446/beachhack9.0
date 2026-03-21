@@ -1,9 +1,10 @@
 from fastapi import FastAPI
+from routes.chat import router as chat_router
 from fastapi.middleware.cors import CORSMiddleware
 
 
 app = FastAPI()
-
+app.include_router(chat_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -12,6 +13,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app
+@app.get("/")
 def home():
     return ("hello","world")

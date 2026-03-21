@@ -1,8 +1,8 @@
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from backend.services.chat import run_chat
-from backend.utils.sse import sse_frame
+from services.chat import run_chat
+from utils.sse import sse_frame
 
 router = APIRouter()
 
