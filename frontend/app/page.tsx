@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
+import { ArchitectureDiagram, type ArchNode, type ArchEdge } from "./components/ArchitectureDiagram";
 
 const API_URL = "http://localhost:1000";
 
@@ -35,6 +36,8 @@ interface ChatMessage {
 interface GeneratedDoc {
   agent: string;
   markdown: string;
+  nodes?: ArchNode[];
+  edges?: ArchEdge[];
 }
 
 interface Project {
@@ -127,10 +130,17 @@ export default function Home() {
         );
 
         const loadedDocs = docsData.map(
-          (d: { agent_name: string; markdown: string }) => ({
-            agent: d.agent_name,
-            markdown: d.markdown,
-          }),
+          (d: { agent_name: string; markdown: string; arch_graph?: string }) => {
+            const doc: GeneratedDoc = { agent: d.agent_name, markdown: d.markdown };
+            if (d.arch_graph) {
+              try {
+                const g = JSON.parse(d.arch_graph);
+                doc.nodes = g.nodes;
+                doc.edges = g.edges;
+              } catch { /* ignore malformed JSON */ }
+            }
+            return doc;
+          },
         );
         setDocs(loadedDocs);
         if (loadedDocs.length > 0) setSelectedDoc(loadedDocs[0]);
@@ -205,7 +215,11 @@ export default function Home() {
             } else if (data.type === "status") {
               setGenStatus(data.message || `Running ${data.agent}…`);
             } else if (data.type === "result") {
-              const newDoc = { agent: data.agent, markdown: data.markdown };
+              const newDoc: GeneratedDoc = {
+                agent: data.agent,
+                markdown: data.markdown,
+                ...(data.nodes ? { nodes: data.nodes, edges: data.edges } : {}),
+              };
               setDocs((prev) => {
                 const filtered = prev.filter((d) => d.agent !== data.agent);
                 return [...filtered, newDoc];
@@ -536,9 +550,26 @@ export default function Home() {
                 </h2>
               </div>
               <div className="flex-1 overflow-y-auto px-8 py-6">
-                <div className="prose prose-invert prose-sm max-w-3xl prose-headings:text-zinc-100 prose-p:text-zinc-300 prose-li:text-zinc-300 prose-code:text-indigo-300 prose-code:bg-zinc-900 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-zinc-900 prose-pre:border prose-pre:border-zinc-800 prose-a:text-indigo-400 prose-strong:text-zinc-200 prose-th:text-zinc-300 prose-td:text-zinc-400">
-                  <ReactMarkdown>{selectedDoc.markdown}</ReactMarkdown>
-                </div>
+                {selectedDoc.agent === "System Architecture" && selectedDoc.nodes && selectedDoc.nodes.length > 0 ? (
+                  <>
+                    <ArchitectureDiagram
+                      nodes={selectedDoc.nodes}
+                      edges={selectedDoc.edges ?? []}
+                    />
+                    <details className="mt-4">
+                      <summary className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-400">
+                        View raw markdown
+                      </summary>
+                      <div className="prose prose-invert prose-sm max-w-3xl prose-headings:text-zinc-100 prose-p:text-zinc-300 prose-li:text-zinc-300 prose-code:text-indigo-300 prose-code:bg-zinc-900 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-zinc-900 prose-pre:border prose-pre:border-zinc-800 prose-a:text-indigo-400 prose-strong:text-zinc-200 prose-th:text-zinc-300 prose-td:text-zinc-400">
+                        <ReactMarkdown>{selectedDoc.markdown}</ReactMarkdown>
+                      </div>
+                    </details>
+                  </>
+                ) : (
+                  <div className="prose prose-invert prose-sm max-w-3xl prose-headings:text-zinc-100 prose-p:text-zinc-300 prose-li:text-zinc-300 prose-code:text-indigo-300 prose-code:bg-zinc-900 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-zinc-900 prose-pre:border prose-pre:border-zinc-800 prose-a:text-indigo-400 prose-strong:text-zinc-200 prose-th:text-zinc-300 prose-td:text-zinc-400">
+                    <ReactMarkdown>{selectedDoc.markdown}</ReactMarkdown>
+                  </div>
+                )}
               </div>
             </>
           ) : (

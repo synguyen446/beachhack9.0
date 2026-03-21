@@ -1,6 +1,6 @@
-from typing import Optional
+from typing import Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # -- Request/Response schemas --------------------------------------------------
@@ -53,14 +53,26 @@ class UserStoriesDoc(BaseModel):
     user_stories: list[str]
 
 
-class SystemArchitectureDoc(BaseModel):
-    architecture_style: str
-    component_diagram: str
-    components: list[str]
-    data_flow: list[str]
-    tech_stack: list[str]
-    scalability_notes: str
-    trade_offs: list[str]
+class ArchNode(BaseModel):
+    id: str          # e.g. "api-gateway", "user-db"
+    label: str       # short display name
+    description: str # one-sentence responsibility
+    technology: str  # e.g. "Next.js 16"
+    node_type: Literal["frontend", "backend", "database", "queue", "external", "service"]
+    layer: int       # 0=client, 1=edge/gateway, 2=services, 3=data, 4=external
+    order: int       # position within the layer (0-indexed, top to bottom)
+
+
+class ArchEdge(BaseModel):
+    id: str      # e.g. "e-frontend-1-api-1"
+    source: str  # node id
+    target: str  # node id
+    label: str   # protocol: "REST", "SQL", "WebSocket", "gRPC", etc.
+
+
+class ArchitectureGraph(BaseModel):
+    nodes: list[ArchNode] = Field(default_factory=list)
+    edges: list[ArchEdge] = Field(default_factory=list)
 
 
 class ApiSpecDoc(BaseModel):

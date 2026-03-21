@@ -1,7 +1,7 @@
 import aiosqlite
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent.parent.parent / "docbot.db"
+DB_PATH = Path(__file__).parent.parent / "docbot.db"
 
 
 async def init_db():
@@ -38,6 +38,12 @@ async def init_db():
             );
         """)
         await db.commit()
+        # Idempotent migration: add arch_graph column if it doesn't exist yet
+        try:
+            await db.execute("ALTER TABLE documents ADD COLUMN arch_graph TEXT")
+            await db.commit()
+        except Exception:
+            pass  # column already exists
 
 
 async def create_project(idea: str) -> int:
@@ -55,11 +61,11 @@ async def get_projects() -> list[dict]:
         return [dict(r) for r in rows]
 
 
-async def save_document(project_id: int, agent_name: str, markdown: str) -> int:
+async def save_document(project_id: int, agent_name: str, markdown: str, arch_graph: str | None = None) -> int:
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
-            "INSERT INTO documents (project_id, agent_name, markdown) VALUES (?, ?, ?)",
-            (project_id, agent_name, markdown),
+            "INSERT INTO documents (project_id, agent_name, markdown, arch_graph) VALUES (?, ?, ?, ?)",
+            (project_id, agent_name, markdown, arch_graph),
         )
         await db.commit()
         return cursor.lastrowid
@@ -69,7 +75,7 @@ async def get_documents(project_id: int) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "SELECT id, project_id, agent_name, markdown, created_at FROM documents WHERE project_id = ? ORDER BY created_at",
+            "SELECT id, project_id, agent_name, markdown, arch_graph, created_at FROM documents WHERE project_id = ? ORDER BY created_at",
             (project_id,),
         )
         rows = await cursor.fetchall()

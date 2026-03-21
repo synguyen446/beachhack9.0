@@ -1,6 +1,11 @@
 import asyncio
+import json
+import os
 from typing import AsyncGenerator
 
+from langchain_ollama import ChatOllama
+
+from models.schemas import ArchitectureGraph
 from utils.doc_agents import make_doc_agents
 from models.database import create_project, save_document, get_project_context
 
@@ -15,6 +20,8 @@ AGENT_NAMES = [
     "DevOps & Deployment",
     "Testing Strategy",
 ]
+
+ARCH_AGENT_NAME = "System Architecture"
 
 
 def _build_prompt(idea: str, context: str | None = None) -> str:
@@ -33,9 +40,46 @@ async def _run_single_agent(agent, prompt: str, queue: asyncio.Queue, project_id
     """Run one agent, persist output, push events to queue."""
     await queue.put({"type": "status", "agent": agent.name})
     try:
-        output = await agent.run(prompt)
-        await save_document(project_id, agent.name, output)
-        await queue.put({"type": "result", "agent": agent.name, "markdown": output})
+        if agent.name == ARCH_AGENT_NAME:
+            # Step 1: full agent run (with tools) → get markdown
+            markdown = await agent.run(prompt)
+
+            # Step 2: bare formatter LLM extracts graph from the markdown text
+            # (inlined to avoid re-running the full agent with tools)
+            try:
+                model = os.environ.get("LOCAL_LLM_MODEL", "qwen3.5")
+                base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+                auth = os.environ.get("OLLAMA_BASIC_AUTH", "")
+                if auth:
+                    from urllib.parse import urlparse, urlunparse
+                    parsed = urlparse(base_url)
+                    base_url = urlunparse(parsed._replace(
+                        netloc=f"{auth}@{parsed.hostname}" + (f":{parsed.port}" if parsed.port else "")
+                    ))
+                formatter = ChatOllama(model=model, base_url=base_url).with_structured_output(ArchitectureGraph)
+                result = await formatter.ainvoke(
+                    "Always respond in English. "
+                    "Extract the architecture graph from this report and return it as structured data "
+                    "with nodes and edges.\n\n" + markdown
+                )
+                graph_data = result.model_dump() if hasattr(result, "model_dump") else {"nodes": [], "edges": []}
+            except Exception:
+                import traceback
+                traceback.print_exc()
+                graph_data = {"nodes": [], "edges": []}
+
+            await save_document(project_id, agent.name, markdown, arch_graph=json.dumps(graph_data))
+            await queue.put({
+                "type": "result",
+                "agent": agent.name,
+                "markdown": markdown,
+                "nodes": graph_data.get("nodes", []),
+                "edges": graph_data.get("edges", []),
+            })
+        else:
+            output = await agent.run(prompt)
+            await save_document(project_id, agent.name, output)
+            await queue.put({"type": "result", "agent": agent.name, "markdown": output})
     except Exception as e:
         import traceback
         traceback.print_exc()

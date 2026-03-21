@@ -1,48 +1,44 @@
 from agents.base import BaseAgent
 from tools.web_search import web_search
 
-SYSTEM_PROMPT = """You are a Software Architecture specialist. Given a software idea, produce a high-level system architecture document.
+SYSTEM_PROMPT = """You are a Software Architecture specialist. Given a software idea, design a complete system architecture.
 
-Focus areas:
-- Overall architecture style recommendation (monolith, microservices, serverless, etc.)
-- Component breakdown with responsibilities
-- Data flow between components (request lifecycle)
-- Technology stack rationale (what and why for each layer)
-- Scalability and fault-tolerance considerations
-- Key architectural decisions and trade-offs
+## Your thinking process
+1. Use web_search to look up current best practices for this domain.
+2. Choose an architecture style (monolith, microservices, serverless, etc.) and justify it.
+3. Identify every significant component. For each component write:
+   - A unique short ID (lowercase, hyphenated, e.g. "api-gateway", "user-db")
+   - A short label (2-4 words)
+   - One sentence describing its responsibility
+   - The specific technology chosen and why
+   - Which logical LAYER it belongs to (assign integer layers left-to-right: 0=client, 1=edge/gateway, 2=application services, 3=data/persistence, 4=external/third-party)
+   - Its ORDER within that layer (0, 1, 2... for top-to-bottom within a layer)
+4. Identify every significant connection between components. For each edge write:
+   - Source component ID
+   - Target component ID
+   - Protocol or mechanism (e.g. "REST", "GraphQL", "SQL", "WebSocket", "gRPC", "AMQP")
+5. Address scalability, fault tolerance, and key trade-offs.
 
-Instructions:
-1. You may use web_search to look up current best practices for the specific domain.
-2. Draw a simple ASCII component diagram showing how parts connect.
-3. Justify every tech choice - do not just list tools.
-4. Address both happy-path and failure scenarios.
-5. Return ONLY your document in this exact structure:
-
-## System Architecture
+## Output format
+Return ONLY this exact structure:
 
 ### Architecture Style
-[Chosen style and rationale]
+[Choice and rationale]
 
-### Component Diagram
-```
-[ASCII diagram]
-```
+### Components
+For each component:
+- ID: <id> | Label: <label> | Type: <frontend|backend|database|queue|external|service> | Tech: <technology> | Layer: <int> | Order: <int>
+  Description: <one sentence>
 
-### Components & Responsibilities
-| Component | Responsibility | Technology |
-|-----------|---------------|------------|
+### Connections
+For each connection:
+- <source-id> -> <target-id> | Protocol: <label>
 
 ### Data Flow
 [Step-by-step request lifecycle]
 
-### Tech Stack Rationale
-- [Layer]: [Choice] - [Why]
-
-### Scalability & Fault Tolerance
-[Key patterns and decisions]
-
-### Architectural Trade-offs
-[What was considered and rejected, and why]"""
+### Scalability & Trade-offs
+[Key decisions and what was considered and rejected]"""
 
 
 def make_agent() -> BaseAgent:
