@@ -82,6 +82,17 @@ async def get_documents(project_id: int) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+async def get_document_by_id(doc_id: int) -> dict | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT id, project_id, agent_name, markdown, arch_graph, created_at FROM documents WHERE id = ?",
+            (doc_id,),
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
 async def save_chat_message(project_id: int, role: str, content: str) -> int:
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(

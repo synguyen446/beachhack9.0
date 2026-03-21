@@ -8,8 +8,8 @@ from langchain_ollama import ChatOllama
 from agents.base import OLLAMA_BASE_URL, _ollama_kwargs
 from agents.project_overview import make_agent as make_overview_agent
 
-CHAT_MODEL = "qwen3.5"
-EXTRACT_MODEL = "qwen3.5"
+CHAT_MODEL = "llama3.2:3b"
+EXTRACT_MODEL = "llama3.2:3b"
 REQUIRED_FIELDS = ["platform", "features", "tech_stack", "audience"]
 
 CHAT_SYSTEM_PROMPT = """You are a helpful assistant for a software project planning tool.

@@ -54,6 +54,7 @@ interface ChatMessage {
 interface GeneratedDoc {
   agent: string;
   markdown: string;
+  doc_id?: number;
   nodes?: ArchNode[];
   edges?: ArchEdge[];
 }
@@ -120,6 +121,7 @@ export default function Home() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
 
+  const [shareOpen, setShareOpen] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [recentIds, setRecentIds] = useState<number[]>([]);
   const [projectNames, setProjectNames] = useState<Record<number, string>>({});
@@ -198,15 +200,8 @@ export default function Home() {
         );
 
         const loadedDocs = docsData.map(
-          (d: {
-            agent_name: string;
-            markdown: string;
-            arch_graph?: string;
-          }) => {
-            const doc: GeneratedDoc = {
-              agent: d.agent_name,
-              markdown: d.markdown,
-            };
+          (d: { id: number; agent_name: string; markdown: string; arch_graph?: string }) => {
+            const doc: GeneratedDoc = { agent: d.agent_name, markdown: d.markdown, doc_id: d.id };
             if (d.arch_graph) {
               try {
                 const g = JSON.parse(d.arch_graph);
@@ -330,6 +325,7 @@ export default function Home() {
               const newDoc: GeneratedDoc = {
                 agent: data.agent,
                 markdown: data.markdown,
+                doc_id: data.doc_id,
                 ...(data.nodes ? { nodes: data.nodes, edges: data.edges } : {}),
               };
               setDocs((prev) => {
@@ -364,18 +360,15 @@ export default function Home() {
     }
   }
 
-  async function handleChat() {
-    if (!chatInput.trim() || projectId === null) return;
-    const userMsg = chatInput;
-    setChatInput("");
-    setChatMessages((prev) => [...prev, { role: "user", content: userMsg }]);
+  async function streamChat(pid: number, message: string) {
+    setChatMessages((prev) => [...prev, { role: "user", content: message }]);
     setChatLoading(true);
 
     try {
       const res = await fetch(`${API_URL}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ project_id: projectId, message: userMsg }),
+        body: JSON.stringify({ project_id: pid, message }),
       });
 
       const reader = res.body?.getReader();
@@ -439,6 +432,31 @@ export default function Home() {
     } finally {
       setChatLoading(false);
     }
+  }
+
+  async function handleChat() {
+    if (!chatInput.trim() || projectId === null) return;
+    const msg = chatInput;
+    setChatInput("");
+    await streamChat(projectId, msg);
+  }
+
+  async function handleSubmitIdea() {
+    if (!idea.trim()) return;
+    let pid = projectId;
+    if (pid === null) {
+      const res = await fetch(`${API_URL}/projects`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idea }),
+      });
+      const data = await res.json();
+      pid = data.project_id;
+      setProjectId(pid);
+      pushRecent(pid);
+      fetchProjects();
+    }
+    await streamChat(pid, idea);
   }
 
   function handleNewProject() {
@@ -599,12 +617,12 @@ export default function Home() {
                 />
                 <button
                   type="button"
-                  onClick={() => handleGenerate("all")}
-                  disabled={genLoading || !idea.trim()}
-                  title="Run all agents"
+                  onClick={handleSubmitIdea}
+                  disabled={chatLoading || !idea.trim()}
+                  title="Start conversation"
                   className={s.promptSendBtn}
                 >
-                  {genLoading ? <Spinner size={12} /> : <IconSend />}
+                  {chatLoading ? <Spinner size={12} /> : <IconSend />}
                 </button>
               </div>
             </div>
@@ -845,7 +863,7 @@ export default function Home() {
                   </div>
                 </div>
               ))}
-              {chatLoading && (
+              {chatLoading && chatMessages[chatMessages.length - 1]?.role !== "assistant" && (
                 <div className="flex justify-start">
                   <div className={s.chatAvatar}>D</div>
                   <div className={s.typingIndicator}>

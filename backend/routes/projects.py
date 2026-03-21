@@ -2,9 +2,9 @@ import io
 import zipfile
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 
-from models.database import get_projects, get_chat_history, get_documents
+from models.database import get_projects, get_chat_history, get_documents, get_document_by_id, create_project
 
 router = APIRouter()
 
@@ -12,6 +12,12 @@ router = APIRouter()
 @router.get("/projects")
 async def list_projects():
     return await get_projects()
+
+
+@router.post("/projects")
+async def new_project(body: dict):
+    project_id = await create_project(body["idea"])
+    return {"project_id": project_id}
 
 
 @router.get("/projects/{project_id}/chat")
@@ -41,4 +47,43 @@ async def export_project(project_id: int):
         buf,
         media_type="application/zip",
         headers={"Content-Disposition": f"attachment; filename=project_{project_id}_docs.zip"},
+    )
+
+
+@router.get("/documents/{doc_id}/download/md")
+async def download_document_md(doc_id: int):
+    doc = await get_document_by_id(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    filename = doc["agent_name"].replace(" ", "_") + ".md"
+    return Response(
+        content=doc["markdown"],
+        media_type="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/documents/{doc_id}/download/pdf")
+async def download_document_pdf(doc_id: int):
+    doc = await get_document_by_id(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    import markdown as md
+    from fpdf import FPDF
+
+    html = md.markdown(doc["markdown"], extensions=["tables", "fenced_code"])
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.set_font("Helvetica", size=11)
+    pdf.write_html(html)
+
+    pdf_bytes = bytes(pdf.output())
+    filename = doc["agent_name"].replace(" ", "_") + ".pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

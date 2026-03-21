@@ -8,3 +8,5 @@ fastapi
 pydantic
 uvicorn[standard]
 aiosqlite
+markdown
+fpdf2

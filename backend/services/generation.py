@@ -68,18 +68,19 @@ async def _run_single_agent(agent, prompt: str, queue: asyncio.Queue, project_id
                 traceback.print_exc()
                 graph_data = {"nodes": [], "edges": []}
 
-            await save_document(project_id, agent.name, markdown, arch_graph=json.dumps(graph_data))
+            doc_id = await save_document(project_id, agent.name, markdown, arch_graph=json.dumps(graph_data))
             await queue.put({
                 "type": "result",
                 "agent": agent.name,
                 "markdown": markdown,
+                "doc_id": doc_id,
                 "nodes": graph_data.get("nodes", []),
                 "edges": graph_data.get("edges", []),
             })
         else:
             output = await agent.run(prompt)
-            await save_document(project_id, agent.name, output)
-            await queue.put({"type": "result", "agent": agent.name, "markdown": output})
+            doc_id = await save_document(project_id, agent.name, output)
+            await queue.put({"type": "result", "agent": agent.name, "markdown": output, "doc_id": doc_id})
     except Exception as e:
         import traceback
         traceback.print_exc()
