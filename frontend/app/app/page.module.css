@@ -345,7 +345,7 @@
   display: flex;
   flex-direction: column;
   flex: 1;
-  overflow: visible;
+  overflow: hidden;
 }
 
 /* ── Top Nav ─────────────────────────────────────────────────────── */
@@ -519,7 +519,7 @@
 .contentRow {
   display: flex;
   flex: 1;
-  overflow: visible;
+  overflow: hidden;
   position: relative;
 }
 
