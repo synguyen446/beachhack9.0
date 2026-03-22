@@ -8,6 +8,11 @@ import {
   type ArchNode,
   type ArchEdge,
 } from "./components/ArchitectureDiagram";
+import {
+  ERDiagram,
+  type ERNodeData,
+  type EREdgeData,
+} from "./components/ERDiagram";
 import s from "./page.module.css";
 
 const API_URL = "http://localhost:1000";
@@ -61,6 +66,8 @@ interface GeneratedDoc {
   doc_id?: number;
   nodes?: ArchNode[];
   edges?: ArchEdge[];
+  er_nodes?: ERNodeData[];
+  er_edges?: EREdgeData[];
 }
 
 interface Project {
@@ -452,6 +459,9 @@ export default function Home() {
                 markdown: data.markdown,
                 doc_id: data.doc_id,
                 ...(data.nodes ? { nodes: data.nodes, edges: data.edges } : {}),
+                ...(data.er_nodes
+                  ? { er_nodes: data.er_nodes, er_edges: data.er_edges }
+                  : {}),
               };
               // Always store the name (safe regardless of which project is active)
               if (data.agent === "Project Overview" && currentProjId !== null) {
@@ -1048,8 +1058,16 @@ export default function Home() {
                     <>
                       {activeDiagram && (
                         <div className={s.diagramPanel}>
-                          {activeDiagram.nodes &&
-                          activeDiagram.nodes.length > 0 ? (
+                          {activeDiagram.agent === "Data Model" &&
+                          activeDiagram.er_nodes &&
+                          activeDiagram.er_nodes.length > 0 ? (
+                            <ERDiagram
+                              key={activeDiagram.agent}
+                              nodes={activeDiagram.er_nodes}
+                              edges={activeDiagram.er_edges ?? []}
+                            />
+                          ) : activeDiagram.nodes &&
+                            activeDiagram.nodes.length > 0 ? (
                             <ArchitectureDiagram
                               key={activeDiagram.agent}
                               nodes={activeDiagram.nodes}

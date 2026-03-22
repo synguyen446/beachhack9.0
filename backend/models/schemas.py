@@ -75,6 +75,32 @@ class ArchitectureGraph(BaseModel):
     edges: list[ArchEdge] = Field(default_factory=list)
 
 
+class ERColumn(BaseModel):
+    name: str          # e.g. "id", "email"
+    type: str          # e.g. "UUID", "VARCHAR(255)"
+    constraints: str   # e.g. "PK", "FK → users.id", "UQ, NOT NULL"
+
+
+class ERNode(BaseModel):
+    id: str            # e.g. "users", "orders"
+    label: str         # e.g. "Users", "Orders"
+    columns: list[ERColumn] = Field(default_factory=list)
+
+
+class EREdge(BaseModel):
+    id: str
+    source: str        # node id
+    target: str        # node id
+    label: str         # e.g. "1:N", "M:N", "1:1"
+    source_label: str  # e.g. "1", "*"
+    target_label: str  # e.g. "*", "1"
+
+
+class ERGraph(BaseModel):
+    nodes: list[ERNode] = Field(default_factory=list)
+    edges: list[EREdge] = Field(default_factory=list)
+
+
 class ApiSpecDoc(BaseModel):
     auth_method: str
     base_url: str
