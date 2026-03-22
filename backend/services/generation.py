@@ -6,7 +6,7 @@ from typing import AsyncGenerator
 
 from langchain_ollama import ChatOllama
 
-from models.schemas import ArchitectureGraph
+from models.schemas import ArchitectureGraph, ERGraph
 from utils.doc_agents import make_doc_agents
 from agents.critic import make_agent as make_critic
 from models.database import create_project, save_document, get_project_context, get_documents
@@ -116,8 +116,10 @@ def _parse_critic_feedback(review: str) -> dict[str, dict]:
     return result
 
 
-async def _extract_graph(markdown: str, instruction: str) -> dict:
+async def _extract_graph(markdown: str, instruction: str, schema=None) -> dict:
     """Run a bare formatter LLM to extract a graph structure from markdown."""
+    if schema is None:
+        schema = ArchitectureGraph
     try:
         model = os.environ.get("LOCAL_LLM_MODEL", "qwen3.5")
         base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
@@ -128,7 +130,7 @@ async def _extract_graph(markdown: str, instruction: str) -> dict:
             base_url = urlunparse(parsed._replace(
                 netloc=f"{auth}@{parsed.hostname}" + (f":{parsed.port}" if parsed.port else "")
             ))
-        formatter = ChatOllama(model=model, base_url=base_url).with_structured_output(ArchitectureGraph)
+        formatter = ChatOllama(model=model, base_url=base_url).with_structured_output(schema)
         result = await formatter.ainvoke(f"Always respond in English. {instruction}\n\n{markdown}")
         return result.model_dump() if hasattr(result, "model_dump") else {"nodes": [], "edges": []}
     except Exception:
@@ -149,27 +151,32 @@ async def _run_single_agent(agent, prompt: str, queue: asyncio.Queue, project_id
                     "Extract the architecture graph from this report and return it as structured data "
                     "with nodes and edges."
                 )
+                graph_data = await _extract_graph(markdown, instruction)
+                doc_id = await save_document(project_id, agent.name, markdown, arch_graph=json.dumps(graph_data))
+                await queue.put({
+                    "type": "result",
+                    "agent": agent.name,
+                    "markdown": markdown,
+                    "doc_id": doc_id,
+                    "nodes": graph_data.get("nodes", []),
+                    "edges": graph_data.get("edges", []),
+                })
             else:
+                # Data Model — extract ER graph with columns and cardinality
                 instruction = (
-                    "Extract the entity-relationship graph from this data model document. "
-                    "Map each database entity/table to a node (use node_type='database', assign each entity "
-                    "a unique lowercase-hyphenated id, a short label, its primary technology/engine, "
-                    "and a layer integer grouping related entities together). "
-                    "Map each relationship (foreign key / association) to an edge with a label like "
-                    "'1:N', 'M:N', or the FK column name. Return structured data with nodes and edges."
+                    "Extract the entity-relationship diagram from this data model document. "
+                    "Return structured data with nodes (entities with columns) and edges (relationships with cardinality)."
                 )
-
-            graph_data = await _extract_graph(markdown, instruction)
-
-            doc_id = await save_document(project_id, agent.name, markdown, arch_graph=json.dumps(graph_data))
-            await queue.put({
-                "type": "result",
-                "agent": agent.name,
-                "markdown": markdown,
-                "doc_id": doc_id,
-                "nodes": graph_data.get("nodes", []),
-                "edges": graph_data.get("edges", []),
-            })
+                graph_data = await _extract_graph(markdown, instruction, schema=ERGraph)
+                doc_id = await save_document(project_id, agent.name, markdown, arch_graph=json.dumps(graph_data))
+                await queue.put({
+                    "type": "result",
+                    "agent": agent.name,
+                    "markdown": markdown,
+                    "doc_id": doc_id,
+                    "er_nodes": graph_data.get("nodes", []),
+                    "er_edges": graph_data.get("edges", []),
+                })
         else:
             output = await agent.run(prompt)
             doc_id = await save_document(project_id, agent.name, output)

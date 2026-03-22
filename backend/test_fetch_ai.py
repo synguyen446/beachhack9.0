@@ -14,7 +14,7 @@ def call_agent():
     response = send_message_to_agent(
         sender=sender_identity,
         target=TARGET_AGENT_ADDRESS,
-        payload={"content": [{"text": "Hello, say hi to @dm1n"}]}    
+        payload={"content": [{"text": "Hello, say hi to agent_PO"}]}    
         )
     print(f"Message sent! Response: {response}")
 
