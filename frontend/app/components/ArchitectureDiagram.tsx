@@ -156,7 +156,7 @@ function ForceGraphClient({
   const graphData = {
     nodes: nodes.map((n) => ({ ...n })),
     links: rawEdges
-      .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
+      .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target) && e.source !== e.target)
       .map((e) => ({ source: e.source, target: e.target, label: e.label })),
   };
 

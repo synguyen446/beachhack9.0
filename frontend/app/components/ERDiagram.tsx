@@ -200,7 +200,7 @@ export const ERDiagram = forwardRef<DiagramRef, { nodes: ERNodeData[]; edges: ER
     const rfNodes = computeLayout(uniqueNodes);
 
     const rfEdges: Edge[] = rawEdges
-      .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
+      .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target) && e.source !== e.target)
       .map((e) => ({
         id: e.id,
         source: e.source,
