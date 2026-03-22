@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 /* ReactFlow Controls — dark theme */
 .react-flow__controls {
