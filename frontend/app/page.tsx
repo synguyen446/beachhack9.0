@@ -136,7 +136,9 @@ export default function Home() {
 
   // Always reflects the latest projectId so async callbacks can guard against stale project
   const projectIdRef = useRef<number | null>(null);
-  useEffect(() => { projectIdRef.current = projectId; }, [projectId]);
+  useEffect(() => {
+    projectIdRef.current = projectId;
+  }, [projectId]);
 
   function extractProjectName(markdown: string): string {
     // Find name after "Project Name Suggestion" label — strips **, [], and descriptions
@@ -208,8 +210,17 @@ export default function Home() {
         );
 
         const loadedDocs = docsData.map(
-          (d: { id: number; agent_name: string; markdown: string; arch_graph?: string }) => {
-            const doc: GeneratedDoc = { agent: d.agent_name, markdown: d.markdown, doc_id: d.id };
+          (d: {
+            id: number;
+            agent_name: string;
+            markdown: string;
+            arch_graph?: string;
+          }) => {
+            const doc: GeneratedDoc = {
+              agent: d.agent_name,
+              markdown: d.markdown,
+              doc_id: d.id,
+            };
             if (d.arch_graph) {
               try {
                 const g = JSON.parse(d.arch_graph);
@@ -494,6 +505,11 @@ export default function Home() {
     setActiveAgents(new Set());
   }
 
+  async function handleDeleteProject(id: number) {
+    await fetch(`${API_URL}/projects/${id}`, { method: "DELETE" });
+    if (projectId === id) handleNewProject();
+    fetchProjects();
+  }
   const activeCount = activeAgents.size;
   const isError = genStatus.startsWith("Error");
   const isAllDone = genStatus === "All documents generated";
@@ -551,16 +567,35 @@ export default function Home() {
                 })
                 .slice(0, 8)
                 .map((proj) => (
-                  <button
-                    type="button"
-                    key={proj.id}
-                    onClick={() => loadProject(proj.id)}
-                    className={`${s.projectItem} ${projectId === proj.id ? s.projectItemActive : ""}`}
-                    title={proj.idea}
-                  >
-                    <span className={s.projectId}>#{proj.id}</span>
-                    {projectNames[proj.id] || proj.idea}
-                  </button>
+                  <div key={proj.id} className={s.projectRow}>
+                    <button
+                      type="button"
+                      onClick={() => loadProject(proj.id)}
+                      className={`${s.projectItem} ${projectId === proj.id ? s.projectItemActive : ""}`}
+                      title={proj.idea}
+                    >
+                      <span className={s.projectId}>#{proj.id}</span>
+                      {projectNames[proj.id] || proj.idea}
+                    </button>
+                    <button
+                      type="button"
+                      className={s.btnDeleteProject}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteProject(proj.id);
+                      }}
+                      title="Delete project"
+                    >
+                      <svg
+                        viewBox="0 0 16 16"
+                        fill="currentColor"
+                        width="12"
+                        height="12"
+                      >
+                        <path d="M11 1.75V3h2.25a.75.75 0 010 1.5H2.75a.75.75 0 010-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75zM6.5 1.75V3h3V1.75a.25.25 0 00-.25-.25h-2.5a.25.25 0 00-.25.25zM4.997 6.178a.75.75 0 10-1.493.144l.684 7.084A1.75 1.75 0 005.926 15h4.148a1.75 1.75 0 001.738-1.594l.684-7.084a.75.75 0 00-1.493-.144L10.32 13.23a.25.25 0 01-.249.228H5.926a.25.25 0 01-.248-.228L4.997 6.178z" />
+                      </svg>
+                    </button>
+                  </div>
                 ))}
             </div>
           </div>
@@ -613,7 +648,9 @@ export default function Home() {
                     className={s.shareMenuItem}
                     onClick={handleCopyLink}
                   >
-                    <span className={s.shareMenuIcon}>{copyDone ? "✓" : "⎘"}</span>
+                    <span className={s.shareMenuIcon}>
+                      {copyDone ? "✓" : "⎘"}
+                    </span>
                     {copyDone ? "Link copied!" : "Copy share link"}
                   </button>
                 </div>
@@ -688,7 +725,6 @@ export default function Home() {
               )}
             </button>
 
-
             {/* AI Context card */}
             {genStatus && (
               <div
@@ -707,7 +743,10 @@ export default function Home() {
             <div>
               <div className={s.panelSublabel}>AGENTS</div>
               <div className={s.agentsList}>
-                {(outputMode === "diagrams" ? DIAGRAM_AGENTS : AGENTS.filter((a) => !DIAGRAM_AGENTS.includes(a))).map((agent) => {
+                {(outputMode === "diagrams"
+                  ? DIAGRAM_AGENTS
+                  : AGENTS.filter((a) => !DIAGRAM_AGENTS.includes(a))
+                ).map((agent) => {
                   const isActive = activeAgents.has(agent);
                   const isDone = docs.some((d) => d.agent === agent);
                   const doc = docs.find((d) => d.agent === agent);
@@ -759,10 +798,23 @@ export default function Home() {
 
           {/* ── Center: Doc Viewer ── */}
           {(() => {
-            const diagramDocs = docs.filter((d) => DIAGRAM_AGENTS.includes(d.agent) && d.nodes && d.nodes.length > 0);
-            const activeDiagram = diagramDocs.find((d) => d.agent === selectedDoc?.agent) ?? diagramDocs[0] ?? null;
-            const docOnlyDocs = docs.filter((d) => !DIAGRAM_AGENTS.includes(d.agent));
-            const activeDoc = (selectedDoc && !DIAGRAM_AGENTS.includes(selectedDoc.agent)) ? selectedDoc : docOnlyDocs[0] ?? null;
+            const diagramDocs = docs.filter(
+              (d) =>
+                DIAGRAM_AGENTS.includes(d.agent) &&
+                d.nodes &&
+                d.nodes.length > 0,
+            );
+            const activeDiagram =
+              diagramDocs.find((d) => d.agent === selectedDoc?.agent) ??
+              diagramDocs[0] ??
+              null;
+            const docOnlyDocs = docs.filter(
+              (d) => !DIAGRAM_AGENTS.includes(d.agent),
+            );
+            const activeDoc =
+              selectedDoc && !DIAGRAM_AGENTS.includes(selectedDoc.agent)
+                ? selectedDoc
+                : (docOnlyDocs[0] ?? null);
 
             return (
               <div className={s.centerPanel}>
@@ -771,8 +823,12 @@ export default function Home() {
                     <>
                       <div className={s.docTabs}>
                         {diagramDocs.map((doc) => (
-                          <button type="button" key={doc.agent} onClick={() => setSelectedDoc(doc)}
-                            className={`${s.docTab} ${activeDiagram?.agent === doc.agent ? s.docTabActive : ""}`}>
+                          <button
+                            type="button"
+                            key={doc.agent}
+                            onClick={() => setSelectedDoc(doc)}
+                            className={`${s.docTab} ${activeDiagram?.agent === doc.agent ? s.docTabActive : ""}`}
+                          >
                             {doc.agent.toUpperCase()}
                           </button>
                         ))}
@@ -780,12 +836,21 @@ export default function Home() {
                       {activeDiagram && (
                         <div className={s.docContent}>
                           <h1 className={s.docTitle}>{activeDiagram.agent}</h1>
-                          <p className={s.docSubtitle}>v1.0 · Generated by DocGenix AI</p>
-                          <ArchitectureDiagram nodes={activeDiagram.nodes!} edges={activeDiagram.edges ?? []} />
+                          <p className={s.docSubtitle}>
+                            v1.0 · Generated by DocGenix AI
+                          </p>
+                          <ArchitectureDiagram
+                            nodes={activeDiagram.nodes!}
+                            edges={activeDiagram.edges ?? []}
+                          />
                           <details className="mt-6">
-                            <summary className={s.rawMdToggle}>VIEW RAW MARKDOWN</summary>
+                            <summary className={s.rawMdToggle}>
+                              VIEW RAW MARKDOWN
+                            </summary>
                             <div className="mt-4 prose prose-invert prose-sm max-w-3xl prose-headings:text-[#F4F6FE] prose-p:text-[#A8ABB2] prose-li:text-[#A8ABB2] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded prose-pre:bg-[#21262E] prose-pre:border prose-pre:border-[#44484E] prose-a:text-[#85ADFF] prose-strong:text-[#F4F6FE] prose-h2:text-[#85ADFF]">
-                              <ReactMarkdown>{activeDiagram.markdown}</ReactMarkdown>
+                              <ReactMarkdown>
+                                {activeDiagram.markdown}
+                              </ReactMarkdown>
                             </div>
                           </details>
                         </div>
@@ -796,40 +861,49 @@ export default function Home() {
                       <div className={s.emptyIcon}>⬡</div>
                       <div>
                         <p className={s.emptyTitle}>No diagrams yet</p>
-                        <p className={s.emptyDesc}>Generate System Architecture or Data Model to view diagrams</p>
+                        <p className={s.emptyDesc}>
+                          Generate System Architecture or Data Model to view
+                          diagrams
+                        </p>
                       </div>
                     </div>
                   )
-                ) : (
-                  docOnlyDocs.length > 0 ? (
-                    <>
-                      <div className={s.docTabs}>
-                        {docOnlyDocs.map((doc) => (
-                          <button type="button" key={doc.agent} onClick={() => setSelectedDoc(doc)}
-                            className={`${s.docTab} ${activeDoc?.agent === doc.agent ? s.docTabActive : ""}`}>
-                            {doc.agent.toUpperCase()}
-                          </button>
-                        ))}
-                      </div>
-                      {activeDoc && (
-                        <div className={s.docContent}>
-                          <h1 className={s.docTitle}>{activeDoc.agent}</h1>
-                          <p className={s.docSubtitle}>v1.0 · Generated by DocGenix AI</p>
-                          <div className="prose prose-invert prose-sm max-w-3xl prose-headings:text-[#F4F6FE] prose-p:text-[#A8ABB2] prose-li:text-[#A8ABB2] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded prose-pre:bg-[#21262E] prose-pre:border prose-pre:border-[#44484E] prose-a:text-[#85ADFF] prose-strong:text-[#F4F6FE] prose-h2:text-[#85ADFF] prose-h3:text-[#7DE9FF]">
-                            <ReactMarkdown>{activeDoc.markdown}</ReactMarkdown>
-                          </div>
+                ) : docOnlyDocs.length > 0 ? (
+                  <>
+                    <div className={s.docTabs}>
+                      {docOnlyDocs.map((doc) => (
+                        <button
+                          type="button"
+                          key={doc.agent}
+                          onClick={() => setSelectedDoc(doc)}
+                          className={`${s.docTab} ${activeDoc?.agent === doc.agent ? s.docTabActive : ""}`}
+                        >
+                          {doc.agent.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                    {activeDoc && (
+                      <div className={s.docContent}>
+                        <h1 className={s.docTitle}>{activeDoc.agent}</h1>
+                        <p className={s.docSubtitle}>
+                          v1.0 · Generated by DocGenix AI
+                        </p>
+                        <div className="prose prose-invert prose-sm max-w-3xl prose-headings:text-[#F4F6FE] prose-p:text-[#A8ABB2] prose-li:text-[#A8ABB2] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded prose-pre:bg-[#21262E] prose-pre:border prose-pre:border-[#44484E] prose-a:text-[#85ADFF] prose-strong:text-[#F4F6FE] prose-h2:text-[#85ADFF] prose-h3:text-[#7DE9FF]">
+                          <ReactMarkdown>{activeDoc.markdown}</ReactMarkdown>
                         </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className={s.emptyState}>
-                      <div className={s.emptyIcon}>◎</div>
-                      <div>
-                        <p className={s.emptyTitle}>No document selected</p>
-                        <p className={s.emptyDesc}>Describe your project and run an agent to generate docs</p>
                       </div>
+                    )}
+                  </>
+                ) : (
+                  <div className={s.emptyState}>
+                    <div className={s.emptyIcon}>◎</div>
+                    <div>
+                      <p className={s.emptyTitle}>No document selected</p>
+                      <p className={s.emptyDesc}>
+                        Describe your project and run an agent to generate docs
+                      </p>
                     </div>
-                  )
+                  </div>
                 )}
               </div>
             );
@@ -886,22 +960,23 @@ export default function Home() {
                   </div>
                 </div>
               ))}
-              {chatLoading && chatMessages[chatMessages.length - 1]?.role !== "assistant" && (
-                <div className="flex justify-start">
-                  <div className={s.chatAvatar}>D</div>
-                  <div className={s.typingIndicator}>
-                    <span
-                      className={`${s.typingDot} animate-bounce [animation-delay:0ms]`}
-                    />
-                    <span
-                      className={`${s.typingDot} animate-bounce [animation-delay:150ms]`}
-                    />
-                    <span
-                      className={`${s.typingDot} animate-bounce [animation-delay:300ms]`}
-                    />
+              {chatLoading &&
+                chatMessages[chatMessages.length - 1]?.role !== "assistant" && (
+                  <div className="flex justify-start">
+                    <div className={s.chatAvatar}>D</div>
+                    <div className={s.typingIndicator}>
+                      <span
+                        className={`${s.typingDot} animate-bounce [animation-delay:0ms]`}
+                      />
+                      <span
+                        className={`${s.typingDot} animate-bounce [animation-delay:150ms]`}
+                      />
+                      <span
+                        className={`${s.typingDot} animate-bounce [animation-delay:300ms]`}
+                      />
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
               <div ref={chatEndRef} />
             </div>
 
