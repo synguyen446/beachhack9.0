@@ -125,6 +125,8 @@ function IconSidebarToggle({ collapsed }: { collapsed: boolean }) {
 
 export default function Home() {
   const [idea, setIdea] = useState("");
+  const [ideaLocked, setIdeaLocked] = useState(false);
+  const [contextReady, setContextReady] = useState(false);
   const [projectId, setProjectId] = useState<number | null>(null);
   const [docs, setDocs] = useState<GeneratedDoc[]>([]);
   const [genLoading, setGenLoading] = useState(false);
@@ -205,6 +207,7 @@ export default function Home() {
   const loadProject = useCallback(
     async (id: number, allProjects?: Project[]) => {
       setProjectId(id);
+      setIdeaLocked(false);
       setChatMessages([]);
       setDocs([]);
       setSelectedDoc(null);
@@ -434,6 +437,7 @@ export default function Home() {
 
   async function streamChat(pid: number, message: string) {
     setChatOpen(true);
+    setIdeaLocked(true);
     setChatMessages((prev) => [...prev, { role: "user", content: message }]);
     setChatLoading(true);
 
@@ -491,6 +495,14 @@ export default function Home() {
                 };
                 return updated;
               });
+            } else if (data.type === "done" && data.context) {
+              setIdea(data.context);
+              const fields = ["platform", "features", "tech_stack", "audience"];
+              const complete = fields.every((f) => {
+                const match = data.context.match(new RegExp(`${f}:\\s*(.+)`, "i"));
+                return match && match[1].trim().toLowerCase() !== "unknown" && match[1].trim() !== "";
+              });
+              setContextReady(complete);
             }
           } catch {
             // skip
@@ -536,6 +548,8 @@ export default function Home() {
   function handleNewProject() {
     setProjectId(null);
     setIdea("");
+    setIdeaLocked(false);
+    setContextReady(false);
     setChatMessages([]);
     setDocs([]);
     setSelectedDoc(null);
@@ -566,6 +580,9 @@ export default function Home() {
 
   return (
     <div className={s.appShell}>
+      {contextReady && !genLoading && (
+        <div className={s.contextReadyOverlay} onClick={() => handleGenerate("all")} />
+      )}
       {/* ── Sidebar ── */}
       <aside
         className={`${s.sidebar} ${isSidebarCollapsed ? s.sidebarCollapsed : ""}`}
@@ -737,11 +754,12 @@ export default function Home() {
               <div className={s.panelLabel}>SYSTEM PROMPT</div>
               <div className={s.promptWrapper}>
                 <textarea
-                  className={s.promptTextarea}
+                  className={`${s.promptTextarea} ${ideaLocked ? s.promptTextareaLocked : ""}`}
                   rows={3}
                   placeholder={"Describe your software project here!"}
                   value={idea}
-                  onChange={(e) => setIdea(e.target.value)}
+                  readOnly={ideaLocked}
+                  onChange={(e) => !ideaLocked && setIdea(e.target.value)}
                 />
                 <button
                   type="button"
@@ -777,21 +795,26 @@ export default function Home() {
             </div>
 
             {/* Run All */}
-            <button
-              type="button"
-              onClick={() => handleGenerate("all")}
-              disabled={genLoading || !idea.trim()}
-              className={s.btnRunAll}
-            >
-              {genLoading ? (
-                <>
-                  <Spinner size={12} />
-                  <span>Running…</span>
-                </>
-              ) : (
-                "Run All Agents"
+            <div className={contextReady && !genLoading ? s.btnRunAllSpotlight : ""}>
+              <button
+                type="button"
+                onClick={() => handleGenerate("all")}
+                disabled={genLoading || !idea.trim()}
+                className={`${s.btnRunAll} ${contextReady && !genLoading ? s.btnRunAllReady : ""}`}
+              >
+                {genLoading ? (
+                  <>
+                    <Spinner size={12} />
+                    <span>Running…</span>
+                  </>
+                ) : (
+                  "Run All Agents"
+                )}
+              </button>
+              {contextReady && !genLoading && (
+                <p className={s.btnRunAllHint}>Ready — click to generate all docs</p>
               )}
-            </button>
+            </div>
 
             {/* Critic status */}
             {criticStatus && (
@@ -1032,7 +1055,7 @@ export default function Home() {
                       )}
                       <div className={msg.role === "user" ? s.msgUser : s.msgAssistant}>
                         {msg.role === "assistant" ? (
-                          <div className="prose prose-invert prose-xs max-w-none prose-p:my-1 prose-li:my-0.5 prose-headings:text-[#F4F6FE] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded">
+                          <div className="prose prose-invert prose-xs max-w-none text-[11px] leading-[1.5] prose-p:my-1 prose-p:text-[11px] prose-li:my-0.5 prose-li:text-[11px] prose-headings:text-[13px] prose-headings:text-[#F4F6FE] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded prose-code:text-[10px]">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                           </div>
                         ) : (

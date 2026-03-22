@@ -569,6 +569,7 @@
 }
 .promptTextarea::placeholder { color: #475569; }
 .promptTextarea:focus { border-color: #85ADFF; }
+.promptTextareaLocked { opacity: 0.6; cursor: default; border-color: #2a3040 !important; }
 .promptTextarea::-webkit-scrollbar { width: 0; }
 .promptTextarea:hover::-webkit-scrollbar { width: 4px; }
 
@@ -640,6 +641,47 @@
 }
 .btnRunAll:hover { opacity: 0.9; }
 .btnRunAll:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Dim overlay when context is ready */
+.contextReadyOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 40;
+  pointer-events: all;
+  animation: overlayFadeIn 0.4s ease forwards;
+}
+
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Lifts button above overlay */
+.btnRunAllSpotlight {
+  position: relative;
+  z-index: 50;
+  border-radius: 8px;
+}
+
+.btnRunAllHint {
+  text-align: center;
+  font-size: 11px;
+  color: #85ADFF;
+  margin-top: 8px;
+  opacity: 0.85;
+  letter-spacing: 0.3px;
+}
+
+@keyframes runAllPulse {
+  0%   { transform: scale(1);    box-shadow: 0 0 0 0 rgba(133, 173, 255, 0.8); }
+  50%  { transform: scale(1.04); box-shadow: 0 0 32px 12px rgba(193, 128, 255, 0.45); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 0 rgba(133, 173, 255, 0); }
+}
+
+.btnRunAllReady {
+  animation: runAllPulse 1.8s ease-in-out infinite;
+}
 
 .progressRow {
   display: flex;

@@ -65,4 +65,4 @@ async def run_chat(project_id: int, message: str) -> AsyncGenerator[dict, None]:
             print(f"  [Chat] overview generation failed: {e}", flush=True)
             yield {"type": "error", "agent": "Project Overview", "error": str(e)}
 
-    yield {"type": "done"}
+    yield {"type": "done", "context": context}
