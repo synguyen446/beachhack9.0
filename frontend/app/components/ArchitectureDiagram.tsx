@@ -1,6 +1,11 @@
 "use client";
 
 import {
+  forwardRef,
+  useImperativeHandle,
+  useRef,
+} from "react";
+import {
   ReactFlow,
   ReactFlowProvider,
   Background,
@@ -18,6 +23,9 @@ import {
   type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { toPng } from "html-to-image";
+
+export type DiagramRef = { toPng: () => Promise<string> };
 
 export interface ArchNode {
   id: string;
@@ -205,76 +213,83 @@ const nodeTypes: NodeTypes = {
   groupNode: GroupNode,
 };
 
-function ArchitectureDiagramInner({
-  nodes: rawNodes,
-  edges: rawEdges,
-}: {
-  nodes: ArchNode[];
-  edges: ArchEdge[];
-}) {
-  // Deduplicate nodes by id
-  const seen = new Set<string>();
-  const uniqueNodes = rawNodes.filter((n) => {
-    if (seen.has(n.id)) return false;
-    seen.add(n.id);
-    return true;
-  });
+const ArchitectureDiagramInner = forwardRef<DiagramRef, { nodes: ArchNode[]; edges: ArchEdge[] }>(
+  function ArchitectureDiagramInner({ nodes: rawNodes, edges: rawEdges }, ref) {
+    const containerRef = useRef<HTMLDivElement>(null);
 
-  const nodeIds = new Set(uniqueNodes.map((n) => n.id));
-
-  const rfNodes = computeGroupedPositions(uniqueNodes);
-  const rfEdges: Edge[] = rawEdges
-    .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
-    .map((e) => ({
-      id: e.id,
-      source: e.source,
-      target: e.target,
-      label: e.label,
-      markerEnd: { type: MarkerType.ArrowClosed, color: "#64748b" },
-      style: { stroke: "#64748b", strokeWidth: 1.5 },
-      labelStyle: { fill: "#94a3b8", fontSize: 9, fontWeight: 500 },
-      labelBgStyle: { fill: "#0f172a", fillOpacity: 0.9 },
+    useImperativeHandle(ref, () => ({
+      async toPng() {
+        if (!containerRef.current) throw new Error("not mounted");
+        return toPng(containerRef.current, { backgroundColor: "#0a0f1a" });
+      },
     }));
 
-  const [nodes, , onNodesChange] = useNodesState(rfNodes);
-  const [edges, , onEdgesChange] = useEdgesState(rfEdges);
-  const { fitView } = useReactFlow();
+    // Deduplicate nodes by id
+    const seen = new Set<string>();
+    const uniqueNodes = rawNodes.filter((n) => {
+      if (seen.has(n.id)) return false;
+      seen.add(n.id);
+      return true;
+    });
 
-  return (
-    <div style={{ width: "100%", height: "100%", background: "#0a0f1a", borderRadius: 12 }}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        nodeTypes={nodeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.15 }}
-      >
-        <Background color="#1a2030" gap={24} size={1} />
-        <Controls showFitView={false}>
-          <ControlButton onClick={() => fitView({ padding: 0.15 })} title="Fit view">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <rect x="2" y="2" width="12" height="12" rx="1" />
-            </svg>
-          </ControlButton>
-        </Controls>
-        <MiniMap
-          nodeColor={(n) => {
-            if (n.type === "groupNode") return "transparent";
-            return GROUP_COLORS[(n.data as Record<string, string>).node_type] ?? "#374151";
-          }}
-          style={{ background: "#0f172a" }}
-        />
-      </ReactFlow>
-    </div>
-  );
-}
+    const nodeIds = new Set(uniqueNodes.map((n) => n.id));
 
-export function ArchitectureDiagram(props: { nodes: ArchNode[]; edges: ArchEdge[] }) {
-  return (
-    <ReactFlowProvider>
-      <ArchitectureDiagramInner {...props} />
-    </ReactFlowProvider>
-  );
-}
+    const rfNodes = computeGroupedPositions(uniqueNodes);
+    const rfEdges: Edge[] = rawEdges
+      .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
+      .map((e) => ({
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        label: e.label,
+        markerEnd: { type: MarkerType.ArrowClosed, color: "#64748b" },
+        style: { stroke: "#64748b", strokeWidth: 1.5 },
+        labelStyle: { fill: "#94a3b8", fontSize: 9, fontWeight: 500 },
+        labelBgStyle: { fill: "#0f172a", fillOpacity: 0.9 },
+      }));
+
+    const [nodes, , onNodesChange] = useNodesState(rfNodes);
+    const [edges, , onEdgesChange] = useEdgesState(rfEdges);
+    const { fitView } = useReactFlow();
+
+    return (
+      <div ref={containerRef} style={{ width: "100%", height: "100%", background: "#0a0f1a", borderRadius: 12 }}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          nodeTypes={nodeTypes}
+          fitView
+          fitViewOptions={{ padding: 0.15 }}
+        >
+          <Background color="#1a2030" gap={24} size={1} />
+          <Controls showFitView={false}>
+            <ControlButton onClick={() => fitView({ padding: 0.15 })} title="Fit view">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="2" y="2" width="12" height="12" rx="1" />
+              </svg>
+            </ControlButton>
+          </Controls>
+          <MiniMap
+            nodeColor={(n) => {
+              if (n.type === "groupNode") return "transparent";
+              return GROUP_COLORS[(n.data as Record<string, string>).node_type] ?? "#374151";
+            }}
+            style={{ background: "#0f172a" }}
+          />
+        </ReactFlow>
+      </div>
+    );
+  }
+);
+
+export const ArchitectureDiagram = forwardRef<DiagramRef, { nodes: ArchNode[]; edges: ArchEdge[] }>(
+  function ArchitectureDiagram(props, ref) {
+    return (
+      <ReactFlowProvider>
+        <ArchitectureDiagramInner ref={ref} {...props} />
+      </ReactFlowProvider>
+    );
+  }
+);

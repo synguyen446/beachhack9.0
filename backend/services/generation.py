@@ -1,15 +1,11 @@
 import asyncio
 import json
-import os
 import re
 from typing import AsyncGenerator
 
-from langchain_ollama import ChatOllama
-
-from models.schemas import ArchitectureGraph, ERGraph
 from utils.doc_agents import make_doc_agents
 from agents.critic import make_agent as make_critic
-from models.database import create_project, save_document, get_project_context, get_documents
+from models.database import create_project, save_document, get_project_context, get_documents, update_document_graph
 
 
 AGENT_NAMES = [
@@ -116,71 +112,200 @@ def _parse_critic_feedback(review: str) -> dict[str, dict]:
     return result
 
 
-async def _extract_graph(markdown: str, instruction: str, schema=None) -> dict:
-    """Run a bare formatter LLM to extract a graph structure from markdown."""
-    if schema is None:
-        schema = ArchitectureGraph
-    try:
-        model = os.environ.get("LOCAL_LLM_MODEL", "qwen3.5")
-        base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
-        auth = os.environ.get("OLLAMA_BASIC_AUTH", "")
-        if auth:
-            from urllib.parse import urlparse, urlunparse
-            parsed = urlparse(base_url)
-            base_url = urlunparse(parsed._replace(
-                netloc=f"{auth}@{parsed.hostname}" + (f":{parsed.port}" if parsed.port else "")
-            ))
-        formatter = ChatOllama(model=model, base_url=base_url).with_structured_output(schema)
-        result = await formatter.ainvoke(f"Always respond in English. {instruction}\n\n{markdown}")
-        return result.model_dump() if hasattr(result, "model_dump") else {"nodes": [], "edges": []}
-    except Exception:
-        import traceback
-        traceback.print_exc()
-        return {"nodes": [], "edges": []}
+def _parse_arch_graph(markdown: str) -> dict:
+    """Parse architecture graph from structured markdown (no LLM needed)."""
+    print("  [GraphExtract] parsing architecture graph from markdown", flush=True)
+    nodes = []
+    edges = []
+
+    # Parse components:
+    # - ID: api-gateway | Label: API Gateway | Type: backend | Tech: Express.js | Layer: 1 | Order: 0
+    #   Description: Routes incoming requests
+    # Matches both "- ID: api-gw | Label: ..." and "- api-gw | Label: ..."
+    comp_re = re.compile(
+        r"-\s*(?:ID:\s*)?(?P<id>[^\|]+?)\s*\|\s*Label:\s*(?P<label>[^\|]+?)\s*\|\s*"
+        r"Type:\s*(?P<type>[^\|]+?)\s*\|\s*Tech:\s*(?P<tech>[^\|]+?)\s*\|\s*"
+        r"Layer:\s*(?P<layer>\d+)\s*\|\s*Order:\s*(?P<order>\d+)"
+    )
+    desc_re = re.compile(r"^\s+Description:\s*(?P<desc>.+)", re.MULTILINE)
+
+    lines = markdown.split("\n")
+    for i, line in enumerate(lines):
+        m = comp_re.search(line)
+        if m:
+            desc = ""
+            # Look ahead for Description line
+            if i + 1 < len(lines):
+                dm = desc_re.search(lines[i + 1])
+                if dm:
+                    desc = dm.group("desc").strip()
+            node_type = m.group("type").strip().lower()
+            if node_type not in ("frontend", "backend", "database", "queue", "external", "service"):
+                node_type = "service"
+            nodes.append({
+                "id": m.group("id").strip(),
+                "label": m.group("label").strip(),
+                "description": desc,
+                "technology": m.group("tech").strip(),
+                "node_type": node_type,
+                "layer": int(m.group("layer")),
+                "order": int(m.group("order")),
+            })
+
+    # Parse connections:
+    # - api-gateway -> user-service | Protocol: REST
+    conn_re = re.compile(
+        r"-\s*(?P<source>[^\s\-][^\->]+?)\s*->\s*(?P<target>[^\|]+?)\s*\|\s*Protocol:\s*(?P<label>.+)"
+    )
+    for i, line in enumerate(lines):
+        m = conn_re.search(line)
+        if m:
+            src = m.group("source").strip()
+            tgt = m.group("target").strip()
+            edges.append({
+                "id": f"e-{i}-{src}-{tgt}",
+                "source": src,
+                "target": tgt,
+                "label": m.group("label").strip(),
+            })
+
+    # Reconcile edge IDs against actual node IDs
+    # (LLM often uses different IDs in Connections vs Components)
+    node_ids = {n["id"] for n in nodes}
+
+    def _closest_node_id(ref: str) -> str:
+        if ref in node_ids:
+            return ref
+        ref_l = ref.lower()
+        for nid in node_ids:
+            if ref_l in nid.lower() or nid.lower() in ref_l:
+                return nid
+        return ref  # no match — frontend will filter it out
+
+    for edge in edges:
+        edge["source"] = _closest_node_id(edge["source"])
+        edge["target"] = _closest_node_id(edge["target"])
+
+    print(f"  [GraphExtract] parsed {len(nodes)} nodes, {len(edges)} edges", flush=True)
+    return {"nodes": nodes, "edges": edges}
+
+
+def _parse_er_graph(markdown: str) -> dict:
+    """Parse ER graph from structured markdown (no LLM needed)."""
+    print("  [GraphExtract] parsing ER graph from markdown", flush=True)
+    nodes = []
+    edges = []
+
+    col_re = re.compile(r"-\s*(?P<name>[^\|]+?)\s*\|\s*(?P<type>[^\|]+?)\s*\|\s*(?P<constraints>.*)")
+    entity_re = re.compile(r"-\s*(?:ID:\s*)?(?:\*\*)?(?P<id>[^\|*]+?)(?:\*\*)?\s*\|\s*(?:Label:\s*)?(?P<label>[^\n|]+)")
+    rel_re = re.compile(
+        r"-\s*(?P<source>[^\s\-][^\->]+?)\s*->\s*(?P<target>[^\|]+?)\s*\|\s*Cardinality:\s*(?P<card>[^\|]+)"
+    )
+
+    # Section-aware parsing
+    section = None  # "entities" | "relationships" | None
+    current_entity = None
+    in_columns = False
+
+    for line in markdown.split("\n"):
+        stripped = line.strip()
+
+        # Track which section we're in
+        if stripped.startswith("### "):
+            if current_entity:
+                nodes.append(current_entity)
+                current_entity = None
+                in_columns = False
+            if "Entities" in stripped:
+                section = "entities"
+            elif "Relationships" in stripped:
+                section = "relationships"
+            else:
+                section = None
+            continue
+
+        # ── Entities section ──
+        if section == "entities":
+            # "Columns:" marker
+            if current_entity and re.match(r"\s+Columns:\s*$", line):
+                in_columns = True
+                continue
+
+            # Indented column lines
+            if current_entity and in_columns:
+                if line.startswith("  ") and stripped.startswith("-"):
+                    cm = col_re.search(line)
+                    if cm:
+                        current_entity["columns"].append({
+                            "name": cm.group("name").strip(),
+                            "type": cm.group("type").strip(),
+                            "constraints": cm.group("constraints").strip(),
+                        })
+                    continue
+                elif stripped:
+                    in_columns = False
+
+            # Top-level entity line (no "->" so not a relationship)
+            if stripped.startswith("-") and "|" in stripped and "->" not in stripped:
+                em = entity_re.search(line)
+                if em:
+                    if current_entity:
+                        nodes.append(current_entity)
+                    current_entity = {
+                        "id": em.group("id").strip(),
+                        "label": em.group("label").strip(),
+                        "columns": [],
+                    }
+                    in_columns = False
+
+        # ── Relationships section ──
+        elif section == "relationships":
+            pass  # handled below after loop
+
+    if current_entity:
+        nodes.append(current_entity)
+
+    # Parse relationships only from the Relationships section
+    rel_section = re.search(r"###\s*Relationships\s*\n(.*?)(?=###|\Z)", markdown, re.DOTALL)
+    rel_lines = rel_section.group(1).split("\n") if rel_section else []
+    for i, line in enumerate(rel_lines):
+        m = rel_re.search(line)
+        if m:
+            src = m.group("source").strip()
+            tgt = m.group("target").strip()
+            card = m.group("card").strip()
+            # Normalize cardinality to allowed values
+            if card == "M:1":
+                card = "1:M"
+            elif card not in ("1:1", "1:M", "M:M"):
+                card = "1:M"
+            # Derive source/target labels
+            if card == "1:1":
+                src_label, tgt_label = "1", "1"
+            elif card == "1:M":
+                src_label, tgt_label = "1", "*"
+            else:
+                src_label, tgt_label = "*", "*"
+            edges.append({
+                "id": f"e-{i}-{src}-{tgt}",
+                "source": src,
+                "target": tgt,
+                "label": card,
+                "source_label": src_label,
+                "target_label": tgt_label,
+            })
+
+    print(f"  [GraphExtract] parsed {len(nodes)} nodes, {len(edges)} edges", flush=True)
+    return {"nodes": nodes, "edges": edges}
 
 
 async def _run_single_agent(agent, prompt: str, queue: asyncio.Queue, project_id: int):
     """Run one agent, persist output, push events to queue."""
     await queue.put({"type": "status", "agent": agent.name})
     try:
-        if agent.name in GRAPH_AGENTS:
-            markdown = await agent.run(prompt)
-
-            if agent.name == ARCH_AGENT_NAME:
-                instruction = (
-                    "Extract the architecture graph from this report and return it as structured data "
-                    "with nodes and edges."
-                )
-                graph_data = await _extract_graph(markdown, instruction)
-                doc_id = await save_document(project_id, agent.name, markdown, arch_graph=json.dumps(graph_data))
-                await queue.put({
-                    "type": "result",
-                    "agent": agent.name,
-                    "markdown": markdown,
-                    "doc_id": doc_id,
-                    "nodes": graph_data.get("nodes", []),
-                    "edges": graph_data.get("edges", []),
-                })
-            else:
-                # Data Model — extract ER graph with columns and cardinality
-                instruction = (
-                    "Extract the entity-relationship diagram from this data model document. "
-                    "Return structured data with nodes (entities with columns) and edges (relationships with cardinality)."
-                )
-                graph_data = await _extract_graph(markdown, instruction, schema=ERGraph)
-                doc_id = await save_document(project_id, agent.name, markdown, arch_graph=json.dumps(graph_data))
-                await queue.put({
-                    "type": "result",
-                    "agent": agent.name,
-                    "markdown": markdown,
-                    "doc_id": doc_id,
-                    "er_nodes": graph_data.get("nodes", []),
-                    "er_edges": graph_data.get("edges", []),
-                })
-        else:
-            output = await agent.run(prompt)
-            doc_id = await save_document(project_id, agent.name, output)
-            await queue.put({"type": "result", "agent": agent.name, "markdown": output, "doc_id": doc_id})
+        markdown = await agent.run(prompt)
+        doc_id = await save_document(project_id, agent.name, markdown)
+        await queue.put({"type": "result", "agent": agent.name, "markdown": markdown, "doc_id": doc_id})
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -339,5 +464,31 @@ async def run_generation(idea: str, agent_name: str, project_id: int | None, age
             import traceback
             traceback.print_exc()
             yield {"type": "critic_error", "message": str(e)}
+
+    # ── Graph extraction via regex (instant, no LLM call) ──
+    # get_documents returns oldest-first; keep only the latest doc per agent
+    db_docs = await get_documents(project_id)
+    latest_docs = {doc["agent_name"]: doc for doc in db_docs}  # last write wins
+    for doc in latest_docs.values():
+        if doc["agent_name"] == ARCH_AGENT_NAME:
+            graph_data = _parse_arch_graph(doc["markdown"])
+            await update_document_graph(doc["id"], json.dumps(graph_data))
+            yield {
+                "type": "graph",
+                "agent": ARCH_AGENT_NAME,
+                "doc_id": doc["id"],
+                "nodes": graph_data.get("nodes", []),
+                "edges": graph_data.get("edges", []),
+            }
+        elif doc["agent_name"] == DATA_MODEL_AGENT_NAME:
+            graph_data = _parse_er_graph(doc["markdown"])
+            await update_document_graph(doc["id"], json.dumps(graph_data))
+            yield {
+                "type": "graph",
+                "agent": DATA_MODEL_AGENT_NAME,
+                "doc_id": doc["id"],
+                "er_nodes": graph_data.get("nodes", []),
+                "er_edges": graph_data.get("edges", []),
+            }
 
     yield {"type": "done"}

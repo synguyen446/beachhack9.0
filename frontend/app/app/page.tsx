@@ -8,12 +8,14 @@ import {
   ArchitectureDiagram,
   type ArchNode,
   type ArchEdge,
+  type DiagramRef,
 } from "../components/ArchitectureDiagram";
 import {
   ERDiagram,
   type ERNodeData,
   type EREdgeData,
 } from "../components/ERDiagram";
+import JSZip from "jszip";
 import s from "./page.module.css";
 
 const API_URL = "http://localhost:1000";
@@ -223,6 +225,8 @@ export default function Home() {
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [copyDone, setCopyDone] = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
+  const archDiagramRef = useRef<DiagramRef>(null);
+  const erDiagramRef = useRef<DiagramRef>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -356,8 +360,13 @@ export default function Home() {
             if (d.arch_graph) {
               try {
                 const g = JSON.parse(d.arch_graph);
-                doc.nodes = g.nodes;
-                doc.edges = g.edges;
+                if (d.agent_name === "Data Model") {
+                  doc.er_nodes = g.nodes;
+                  doc.er_edges = g.edges;
+                } else {
+                  doc.nodes = g.nodes;
+                  doc.edges = g.edges;
+                }
               } catch {
                 /* ignore */
               }
@@ -546,6 +555,20 @@ export default function Home() {
               if (projectIdRef.current === currentProjId) {
                 setCriticStatus("Max review iterations reached");
               }
+            } else if (data.type === "graph") {
+              if (projectIdRef.current === currentProjId) {
+                setDocs((prev) =>
+                  prev.map((d) =>
+                    d.doc_id === data.doc_id
+                      ? {
+                          ...d,
+                          ...(data.nodes ? { nodes: data.nodes, edges: data.edges } : {}),
+                          ...(data.er_nodes ? { er_nodes: data.er_nodes, er_edges: data.er_edges } : {}),
+                        }
+                      : d,
+                  ),
+                );
+              }
             } else if (data.type === "error") {
             } else if (data.type === "done") {
               if (projectIdRef.current === currentProjId) {
@@ -687,10 +710,10 @@ export default function Home() {
       const data = await res.json();
       pid = data.project_id;
       setProjectId(pid);
-      pushRecent(pid);
+      pushRecent(pid!);
       fetchProjects();
     }
-    await streamChat(pid, text);
+    await streamChat(pid!, text);
   }
 
   async function handleSubmitIdea() {
@@ -746,10 +769,37 @@ export default function Home() {
   }
   const activeCount = activeAgents.size;
 
-  function handleDownloadZip() {
+  async function handleDownloadZip() {
     if (projectId === null) return;
-    window.open(`${API_URL}/projects/${projectId}/export`, "_blank");
     setShowShareMenu(false);
+
+    const zip = new JSZip();
+
+    for (const doc of docs) {
+      const filename = doc.agent.replace(/ /g, "_").replace(/\//g, "-") + ".md";
+      zip.file(filename, doc.markdown);
+    }
+
+    for (const [ref, name] of [
+      [archDiagramRef, "System_Architecture"],
+      [erDiagramRef, "Data_Model"],
+    ] as const) {
+      try {
+        if (ref.current) {
+          const dataUrl = await ref.current.toPng();
+          const base64 = dataUrl.split(",")[1];
+          zip.file(`${name}.png`, base64, { base64: true });
+        }
+      } catch { /* diagram not mounted */ }
+    }
+
+    const blob = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `project_${projectId}_docs.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   function handleCopyLink() {
@@ -1128,6 +1178,7 @@ export default function Home() {
                           activeDiagram.er_nodes &&
                           activeDiagram.er_nodes.length > 0 ? (
                             <ERDiagram
+                              ref={erDiagramRef}
                               key={activeDiagram.agent}
                               nodes={activeDiagram.er_nodes}
                               edges={activeDiagram.er_edges ?? []}
@@ -1135,6 +1186,7 @@ export default function Home() {
                           ) : activeDiagram.nodes &&
                             activeDiagram.nodes.length > 0 ? (
                             <ArchitectureDiagram
+                              ref={archDiagramRef}
                               key={activeDiagram.agent}
                               nodes={activeDiagram.nodes}
                               edges={activeDiagram.edges ?? []}

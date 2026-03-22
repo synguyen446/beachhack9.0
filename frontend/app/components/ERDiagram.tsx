@@ -1,6 +1,11 @@
 "use client";
 
 import {
+  forwardRef,
+  useImperativeHandle,
+  useRef,
+} from "react";
+import {
   ReactFlow,
   Background,
   Controls,
@@ -15,6 +20,9 @@ import {
   type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { toPng } from "html-to-image";
+
+import type { DiagramRef } from "./ArchitectureDiagram";
 
 export interface ERColumn {
   name: string;
@@ -156,58 +164,63 @@ function computeLayout(rawNodes: ERNodeData[]): Node[] {
   return nodes;
 }
 
-export function ERDiagram({
-  nodes: rawNodes,
-  edges: rawEdges,
-}: {
-  nodes: ERNodeData[];
-  edges: EREdgeData[];
-}) {
-  // Deduplicate nodes
-  const seen = new Set<string>();
-  const uniqueNodes = rawNodes.filter((n) => {
-    if (seen.has(n.id)) return false;
-    seen.add(n.id);
-    return true;
-  });
+export const ERDiagram = forwardRef<DiagramRef, { nodes: ERNodeData[]; edges: EREdgeData[] }>(
+  function ERDiagram({ nodes: rawNodes, edges: rawEdges }, ref) {
+    const containerRef = useRef<HTMLDivElement>(null);
 
-  const nodeIds = new Set(uniqueNodes.map((n) => n.id));
-  const rfNodes = computeLayout(uniqueNodes);
-
-  const rfEdges: Edge[] = rawEdges
-    .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
-    .map((e) => ({
-      id: e.id,
-      source: e.source,
-      target: e.target,
-      label: e.label || "",
-      markerEnd: { type: MarkerType.ArrowClosed, color: "#f59e0b" },
-      style: { stroke: "#f59e0b", strokeWidth: 1.5, opacity: 0.7 },
-      labelStyle: { fill: "#fbbf24", fontSize: 10, fontWeight: 600 },
-      labelBgStyle: { fill: "#0f172a", fillOpacity: 0.9 },
+    useImperativeHandle(ref, () => ({
+      async toPng() {
+        if (!containerRef.current) throw new Error("not mounted");
+        return toPng(containerRef.current, { backgroundColor: "#0a0f1a" });
+      },
     }));
 
-  const [nodes, , onNodesChange] = useNodesState(rfNodes);
-  const [edges, , onEdgesChange] = useEdgesState(rfEdges);
+    // Deduplicate nodes
+    const seen = new Set<string>();
+    const uniqueNodes = rawNodes.filter((n) => {
+      if (seen.has(n.id)) return false;
+      seen.add(n.id);
+      return true;
+    });
 
-  return (
-    <div style={{ width: "100%", height: "100%", background: "#0a0f1a", borderRadius: 12 }}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        nodeTypes={nodeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.2 }}
-      >
-        <Background color="#1a2030" gap={24} size={1} />
-        <Controls />
-        <MiniMap
-          nodeColor={() => "#78350f"}
-          style={{ background: "#0f172a" }}
-        />
-      </ReactFlow>
-    </div>
-  );
-}
+    const nodeIds = new Set(uniqueNodes.map((n) => n.id));
+    const rfNodes = computeLayout(uniqueNodes);
+
+    const rfEdges: Edge[] = rawEdges
+      .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
+      .map((e) => ({
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        label: e.label || "",
+        markerEnd: { type: MarkerType.ArrowClosed, color: "#f59e0b" },
+        style: { stroke: "#f59e0b", strokeWidth: 1.5, opacity: 0.7 },
+        labelStyle: { fill: "#fbbf24", fontSize: 10, fontWeight: 600 },
+        labelBgStyle: { fill: "#0f172a", fillOpacity: 0.9 },
+      }));
+
+    const [nodes, , onNodesChange] = useNodesState(rfNodes);
+    const [edges, , onEdgesChange] = useEdgesState(rfEdges);
+
+    return (
+      <div ref={containerRef} style={{ width: "100%", height: "100%", background: "#0a0f1a", borderRadius: 12 }}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          nodeTypes={nodeTypes}
+          fitView
+          fitViewOptions={{ padding: 0.2 }}
+        >
+          <Background color="#1a2030" gap={24} size={1} />
+          <Controls />
+          <MiniMap
+            nodeColor={() => "#78350f"}
+            style={{ background: "#0f172a" }}
+          />
+        </ReactFlow>
+      </div>
+    );
+  }
+);
