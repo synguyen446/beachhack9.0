@@ -1207,7 +1207,6 @@ export default function Home() {
                           activeDiagram.er_nodes &&
                           activeDiagram.er_nodes.length > 0 ? (
                             <ERDiagram
-                              ref={erDiagramRef}
                               key={activeDiagram.agent}
                               nodes={activeDiagram.er_nodes}
                               edges={activeDiagram.er_edges ?? []}
@@ -1215,7 +1214,6 @@ export default function Home() {
                           ) : activeDiagram.nodes &&
                             activeDiagram.nodes.length > 0 ? (
                             <ArchitectureDiagram
-                              ref={archDiagramRef}
                               key={activeDiagram.agent}
                               nodes={activeDiagram.nodes}
                               edges={activeDiagram.edges ?? []}
@@ -1459,6 +1457,32 @@ export default function Home() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Hidden off-screen diagrams — always mounted so export refs are valid */}
+      <div style={{ position: "fixed", left: "-9999px", top: 0, width: "1280px", height: "800px", pointerEvents: "none", opacity: 0, zIndex: -1 }}>
+        {(() => {
+          const archDoc = docs.find((d) => d.agent === "System Architecture");
+          const erDoc = docs.find((d) => d.agent === "Data Model");
+          return (
+            <>
+              {archDoc?.nodes && archDoc.nodes.length > 0 && (
+                <ArchitectureDiagram
+                  ref={archDiagramRef}
+                  nodes={archDoc.nodes}
+                  edges={archDoc.edges ?? []}
+                />
+              )}
+              {erDoc?.er_nodes && erDoc.er_nodes.length > 0 && (
+                <ERDiagram
+                  ref={erDiagramRef}
+                  nodes={erDoc.er_nodes}
+                  edges={erDoc.er_edges ?? []}
+                />
+              )}
+            </>
+          );
+        })()}
       </div>
     </div>
   );
