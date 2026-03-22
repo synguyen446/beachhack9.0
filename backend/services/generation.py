@@ -22,6 +22,8 @@ AGENT_NAMES = [
 ]
 
 ARCH_AGENT_NAME = "System Architecture"
+DATA_MODEL_AGENT_NAME = "Data Model"
+GRAPH_AGENTS = {ARCH_AGENT_NAME, DATA_MODEL_AGENT_NAME}
 
 
 def _build_prompt(idea: str, context: str | None = None) -> str:
@@ -36,37 +38,50 @@ def _build_prompt(idea: str, context: str | None = None) -> str:
     return "\n".join(parts)
 
 
+async def _extract_graph(markdown: str, instruction: str) -> dict:
+    """Run a bare formatter LLM to extract a graph structure from markdown."""
+    try:
+        model = os.environ.get("LOCAL_LLM_MODEL", "qwen3.5")
+        base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+        auth = os.environ.get("OLLAMA_BASIC_AUTH", "")
+        if auth:
+            from urllib.parse import urlparse, urlunparse
+            parsed = urlparse(base_url)
+            base_url = urlunparse(parsed._replace(
+                netloc=f"{auth}@{parsed.hostname}" + (f":{parsed.port}" if parsed.port else "")
+            ))
+        formatter = ChatOllama(model=model, base_url=base_url).with_structured_output(ArchitectureGraph)
+        result = await formatter.ainvoke(f"Always respond in English. {instruction}\n\n{markdown}")
+        return result.model_dump() if hasattr(result, "model_dump") else {"nodes": [], "edges": []}
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        return {"nodes": [], "edges": []}
+
+
 async def _run_single_agent(agent, prompt: str, queue: asyncio.Queue, project_id: int):
     """Run one agent, persist output, push events to queue."""
     await queue.put({"type": "status", "agent": agent.name})
     try:
-        if agent.name == ARCH_AGENT_NAME:
-            # Step 1: full agent run (with tools) → get markdown
+        if agent.name in GRAPH_AGENTS:
             markdown = await agent.run(prompt)
 
-            # Step 2: bare formatter LLM extracts graph from the markdown text
-            # (inlined to avoid re-running the full agent with tools)
-            try:
-                model = os.environ.get("LOCAL_LLM_MODEL", "qwen3.5")
-                base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
-                auth = os.environ.get("OLLAMA_BASIC_AUTH", "")
-                if auth:
-                    from urllib.parse import urlparse, urlunparse
-                    parsed = urlparse(base_url)
-                    base_url = urlunparse(parsed._replace(
-                        netloc=f"{auth}@{parsed.hostname}" + (f":{parsed.port}" if parsed.port else "")
-                    ))
-                formatter = ChatOllama(model=model, base_url=base_url).with_structured_output(ArchitectureGraph)
-                result = await formatter.ainvoke(
-                    "Always respond in English. "
+            if agent.name == ARCH_AGENT_NAME:
+                instruction = (
                     "Extract the architecture graph from this report and return it as structured data "
-                    "with nodes and edges.\n\n" + markdown
+                    "with nodes and edges."
                 )
-                graph_data = result.model_dump() if hasattr(result, "model_dump") else {"nodes": [], "edges": []}
-            except Exception:
-                import traceback
-                traceback.print_exc()
-                graph_data = {"nodes": [], "edges": []}
+            else:
+                instruction = (
+                    "Extract the entity-relationship graph from this data model document. "
+                    "Map each database entity/table to a node (use node_type='database', assign each entity "
+                    "a unique lowercase-hyphenated id, a short label, its primary technology/engine, "
+                    "and a layer integer grouping related entities together). "
+                    "Map each relationship (foreign key / association) to an edge with a label like "
+                    "'1:N', 'M:N', or the FK column name. Return structured data with nodes and edges."
+                )
+
+            graph_data = await _extract_graph(markdown, instruction)
 
             doc_id = await save_document(project_id, agent.name, markdown, arch_graph=json.dumps(graph_data))
             await queue.put({

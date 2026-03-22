@@ -11,6 +11,9 @@ import s from "./page.module.css";
 
 const API_URL = "http://localhost:1000";
 
+// Agents that produce a visual diagram (nodes/edges)
+const DIAGRAM_AGENTS = ["System Architecture", "Data Model"];
+
 const AGENTS = [
   "Project Overview",
   "Requirements",
@@ -123,7 +126,6 @@ export default function Home() {
   const [idea, setIdea] = useState("");
   const [projectId, setProjectId] = useState<number | null>(null);
   const [docs, setDocs] = useState<GeneratedDoc[]>([]);
-  const [genStatus, setGenStatus] = useState("");
   const [genLoading, setGenLoading] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<GeneratedDoc | null>(null);
   const [activeAgents, setActiveAgents] = useState<Set<string>>(new Set());
@@ -139,10 +141,18 @@ export default function Home() {
   const [recentIds, setRecentIds] = useState<number[]>([]);
   const [projectNames, setProjectNames] = useState<Record<number, string>>({});
 
+  const [outputMode, setOutputMode] = useState<"docs" | "diagrams">("docs");
+  const [chatOpen, setChatOpen] = useState(true);
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [copyDone, setCopyDone] = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Always reflects the latest projectId so async callbacks can guard against stale project
+  const projectIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    projectIdRef.current = projectId;
+  }, [projectId]);
 
   function extractProjectName(markdown: string): string {
     // Find name after "Project Name Suggestion" label — strips **, [], and descriptions
@@ -194,7 +204,6 @@ export default function Home() {
       setChatMessages([]);
       setDocs([]);
       setSelectedDoc(null);
-      setGenStatus("");
       pushRecent(id);
 
       try {
@@ -214,8 +223,17 @@ export default function Home() {
         );
 
         const loadedDocs = docsData.map(
-          (d: { id: number; agent_name: string; markdown: string; arch_graph?: string }) => {
-            const doc: GeneratedDoc = { agent: d.agent_name, markdown: d.markdown, doc_id: d.id };
+          (d: {
+            id: number;
+            agent_name: string;
+            markdown: string;
+            arch_graph?: string;
+          }) => {
+            const doc: GeneratedDoc = {
+              agent: d.agent_name,
+              markdown: d.markdown,
+              doc_id: d.id,
+            };
             if (d.arch_graph) {
               try {
                 const g = JSON.parse(d.arch_graph);
@@ -300,22 +318,23 @@ export default function Home() {
 
   async function handleGenerate(agent: string) {
     if (!idea.trim()) return;
+    // Capture which project this generation belongs to
+    const myProjId = projectId;
     setGenLoading(true);
     setActiveAgents(agent === "all" ? new Set(AGENTS) : new Set([agent]));
-    setGenStatus(agent === "all" ? "Running all agents…" : `Running ${agent}…`);
 
     try {
       const res = await fetch(`${API_URL}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idea, agent, project_id: projectId }),
+        body: JSON.stringify({ idea, agent, project_id: myProjId }),
       });
 
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();
       if (!reader) return;
 
-      let currentProjId = projectId;
+      let currentProjId = myProjId;
       let buffer = "";
       while (true) {
         const { done, value } = await reader.read();
@@ -334,7 +353,7 @@ export default function Home() {
               setProjectId(data.project_id);
               fetchProjects();
             } else if (data.type === "status") {
-              setGenStatus(data.message || `Running ${data.agent}…`);
+              // Only update UI status if we're still on this project
             } else if (data.type === "result") {
               const newDoc: GeneratedDoc = {
                 agent: data.agent,
@@ -342,35 +361,40 @@ export default function Home() {
                 doc_id: data.doc_id,
                 ...(data.nodes ? { nodes: data.nodes, edges: data.edges } : {}),
               };
-              setDocs((prev) => {
-                const filtered = prev.filter((d) => d.agent !== data.agent);
-                return [...filtered, newDoc];
-              });
-              setSelectedDoc(newDoc);
+              // Always store the name (safe regardless of which project is active)
               if (data.agent === "Project Overview" && currentProjId !== null) {
                 storeProjectName(currentProjId, data.markdown);
               }
-              setActiveAgents((prev) => {
-                const next = new Set(prev);
-                next.delete(data.agent);
-                return next;
-              });
+              // Only mutate visible state if the user is still viewing this project
+              if (projectIdRef.current === currentProjId) {
+                setDocs((prev) => {
+                  const filtered = prev.filter((d) => d.agent !== data.agent);
+                  return [...filtered, newDoc];
+                });
+                setSelectedDoc(newDoc);
+                setActiveAgents((prev) => {
+                  const next = new Set(prev);
+                  next.delete(data.agent);
+                  return next;
+                });
+              }
             } else if (data.type === "error") {
-              setGenStatus(`Error: ${data.message}`);
             } else if (data.type === "done") {
-              setGenStatus("All documents generated");
-              setActiveAgents(new Set());
+              if (projectIdRef.current === currentProjId) {
+                setActiveAgents(new Set());
+              }
             }
           } catch {
             // skip
           }
         }
       }
-    } catch (err) {
-      setGenStatus(`Error: ${err}`);
+    } catch {
     } finally {
-      setGenLoading(false);
-      setActiveAgents(new Set());
+      if (projectIdRef.current === myProjId) {
+        setGenLoading(false);
+        setActiveAgents(new Set());
+      }
     }
   }
 
@@ -479,15 +503,15 @@ export default function Home() {
     setChatMessages([]);
     setDocs([]);
     setSelectedDoc(null);
-    setGenStatus("");
     setActiveAgents(new Set());
   }
 
-  const completedCount = docs.length;
-  const totalAgents = AGENTS.length;
+  async function handleDeleteProject(id: number) {
+    await fetch(`${API_URL}/projects/${id}`, { method: "DELETE" });
+    if (projectId === id) handleNewProject();
+    fetchProjects();
+  }
   const activeCount = activeAgents.size;
-  const isError = genStatus.startsWith("Error");
-  const isAllDone = genStatus === "All documents generated";
 
   function handleDownloadZip() {
     if (projectId === null) return;
@@ -583,16 +607,34 @@ export default function Home() {
                 })
                 .slice(0, 8)
                 .map((proj) => (
-                  <button
-                    type="button"
-                    key={proj.id}
-                    onClick={() => loadProject(proj.id)}
-                    className={`${s.projectItem} ${projectId === proj.id ? s.projectItemActive : ""}`}
-                    title={proj.idea}
-                  >
-                    <span className={s.projectId}>#{proj.id}</span>
-                    {projectNames[proj.id] || proj.idea}
-                  </button>
+                  <div key={proj.id} className={s.projectRow}>
+                    <button
+                      type="button"
+                      onClick={() => loadProject(proj.id)}
+                      className={`${s.projectItem} ${projectId === proj.id ? s.projectItemActive : ""}`}
+                      title={proj.idea}
+                    >
+                      {projectNames[proj.id] || proj.idea}
+                    </button>
+                    <button
+                      type="button"
+                      className={s.btnDeleteProject}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteProject(proj.id);
+                      }}
+                      title="Delete project"
+                    >
+                      <svg
+                        viewBox="0 0 16 16"
+                        fill="currentColor"
+                        width="12"
+                        height="12"
+                      >
+                        <path d="M11 1.75V3h2.25a.75.75 0 010 1.5H2.75a.75.75 0 010-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75zM6.5 1.75V3h3V1.75a.25.25 0 00-.25-.25h-2.5a.25.25 0 00-.25.25zM4.997 6.178a.75.75 0 10-1.493.144l.684 7.084A1.75 1.75 0 005.926 15h4.148a1.75 1.75 0 001.738-1.594l.684-7.084a.75.75 0 00-1.493-.144L10.32 13.23a.25.25 0 01-.249.228H5.926a.25.25 0 01-.248-.228L4.997 6.178z" />
+                      </svg>
+                    </button>
+                  </div>
                 ))}
             </div>
           </div>
@@ -645,7 +687,9 @@ export default function Home() {
                     className={s.shareMenuItem}
                     onClick={handleCopyLink}
                   >
-                    <span className={s.shareMenuIcon}>{copyDone ? "✓" : "⎘"}</span>
+                    <span className={s.shareMenuIcon}>
+                      {copyDone ? "✓" : "⎘"}
+                    </span>
                     {copyDone ? "Link copied!" : "Copy share link"}
                   </button>
                 </div>
@@ -663,10 +707,8 @@ export default function Home() {
               <div className={s.promptWrapper}>
                 <textarea
                   className={s.promptTextarea}
-                  rows={6}
-                  placeholder={
-                    'Describe your software project...\ne.g. "A scalable microservices platform for e-commerce using Kafka and Go."'
-                  }
+                  rows={3}
+                  placeholder={"Describe your software project here!"}
                   value={idea}
                   onChange={(e) => setIdea(e.target.value)}
                 />
@@ -688,11 +730,16 @@ export default function Home() {
               <div className={s.outputToggle}>
                 <button
                   type="button"
-                  className={`${s.toggleBtn} ${s.toggleBtnActive}`}
+                  onClick={() => setOutputMode("docs")}
+                  className={`${s.toggleBtn} ${outputMode === "docs" ? s.toggleBtnActive : ""}`}
                 >
                   Documentation
                 </button>
-                <button type="button" className={s.toggleBtn}>
+                <button
+                  type="button"
+                  onClick={() => setOutputMode("diagrams")}
+                  className={`${s.toggleBtn} ${outputMode === "diagrams" ? s.toggleBtnActive : ""}`}
+                >
                   Diagrams
                 </button>
               </div>
@@ -715,49 +762,15 @@ export default function Home() {
               )}
             </button>
 
-            {/* Progress */}
-            {genLoading && completedCount > 0 && (
-              <div>
-                <div className={s.progressRow}>
-                  <span>
-                    {completedCount} / {totalAgents} complete
-                  </span>
-                  <span>
-                    {Math.round((completedCount / totalAgents) * 100)}%
-                  </span>
-                </div>
-                <div className={s.progressTrack}>
-                  <div
-                    className={s.progressFill}
-                    style={
-                      {
-                        "--progress-width": `${(completedCount / totalAgents) * 100}%`,
-                      } as React.CSSProperties
-                    }
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* AI Context card */}
-            {genStatus && (
-              <div
-                className={`${s.aiContextCard} ${isError ? s.aiContextCardError : isAllDone ? s.aiContextCardSuccess : ""}`}
-              >
-                <div className={s.aiContextLabel}>AI CONTEXT</div>
-                <div
-                  className={`${s.aiContextText} ${isError ? s.aiContextTextError : isAllDone ? s.aiContextTextSuccess : ""}`}
-                >
-                  {genStatus}
-                </div>
-              </div>
-            )}
 
             {/* Agents list */}
             <div>
               <div className={s.panelSublabel}>AGENTS</div>
               <div className={s.agentsList}>
-                {AGENTS.map((agent) => {
+                {(outputMode === "diagrams"
+                  ? DIAGRAM_AGENTS
+                  : AGENTS.filter((a) => !DIAGRAM_AGENTS.includes(a))
+                ).map((agent) => {
                   const isActive = activeAgents.has(agent);
                   const isDone = docs.some((d) => d.agent === agent);
                   const doc = docs.find((d) => d.agent === agent);
@@ -808,161 +821,219 @@ export default function Home() {
           </div>
 
           {/* ── Center: Doc Viewer ── */}
-          <div className={s.centerPanel}>
-            {selectedDoc ? (
-              <>
-                <div className={s.docTabs}>
-                  {docs.map((doc) => (
-                    <button
-                      type="button"
-                      key={doc.agent}
-                      onClick={() => setSelectedDoc(doc)}
-                      className={`${s.docTab} ${selectedDoc.agent === doc.agent ? s.docTabActive : ""}`}
-                    >
-                      {doc.agent.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
+          {(() => {
+            const diagramDocs = docs.filter(
+              (d) => DIAGRAM_AGENTS.includes(d.agent),
+            );
+            const activeDiagram =
+              diagramDocs.find((d) => d.agent === selectedDoc?.agent) ??
+              diagramDocs[0] ??
+              null;
+            const docOnlyDocs = docs.filter(
+              (d) => !DIAGRAM_AGENTS.includes(d.agent),
+            );
+            const activeDoc =
+              selectedDoc && !DIAGRAM_AGENTS.includes(selectedDoc.agent)
+                ? selectedDoc
+                : (docOnlyDocs[0] ?? null);
 
-                <div className={s.docContent}>
-                  <h1 className={s.docTitle}>{selectedDoc.agent}</h1>
-                  <p className={s.docSubtitle}>
-                    v1.0 · Generated by DocGenix AI
-                  </p>
-
-                  {selectedDoc.agent === "System Architecture" &&
-                  selectedDoc.nodes &&
-                  selectedDoc.nodes.length > 0 ? (
+            return (
+              <div className={s.centerPanel}>
+                {outputMode === "diagrams" ? (
+                  diagramDocs.length > 0 ? (
                     <>
-                      <ArchitectureDiagram
-                        nodes={selectedDoc.nodes}
-                        edges={selectedDoc.edges ?? []}
-                      />
-                      <details className="mt-6">
-                        <summary className={s.rawMdToggle}>
-                          VIEW RAW MARKDOWN
-                        </summary>
-                        <div className="mt-4 prose prose-invert prose-sm max-w-3xl prose-headings:text-[#F4F6FE] prose-p:text-[#A8ABB2] prose-li:text-[#A8ABB2] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded prose-pre:bg-[#21262E] prose-pre:border prose-pre:border-[#44484E] prose-a:text-[#85ADFF] prose-strong:text-[#F4F6FE] prose-h2:text-[#85ADFF]">
-                          <ReactMarkdown>{selectedDoc.markdown}</ReactMarkdown>
+                      <div className={s.docTabs}>
+                        {diagramDocs.map((doc) => (
+                          <button
+                            type="button"
+                            key={doc.agent}
+                            onClick={() => setSelectedDoc(doc)}
+                            className={`${s.docTab} ${activeDiagram?.agent === doc.agent ? s.docTabActive : ""}`}
+                          >
+                            {doc.agent.toUpperCase()}
+                          </button>
+                        ))}
+                      </div>
+                      {activeDiagram && (
+                        <div className={s.diagramPanel}>
+                          {activeDiagram.nodes && activeDiagram.nodes.length > 0 ? (
+                            <ArchitectureDiagram
+                              key={activeDiagram.agent}
+                              nodes={activeDiagram.nodes}
+                              edges={activeDiagram.edges ?? []}
+                            />
+                          ) : (
+                            <div className={s.emptyState}>
+                              <div className={s.emptyIcon}>⬡</div>
+                              <div>
+                                <p className={s.emptyTitle}>No diagram yet</p>
+                                <p className={s.emptyDesc}>Regenerate {activeDiagram.agent} to produce the visual diagram</p>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </details>
+                      )}
                     </>
                   ) : (
-                    <div className="prose prose-invert prose-sm max-w-3xl prose-headings:text-[#F4F6FE] prose-p:text-[#A8ABB2] prose-li:text-[#A8ABB2] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded prose-pre:bg-[#21262E] prose-pre:border prose-pre:border-[#44484E] prose-a:text-[#85ADFF] prose-strong:text-[#F4F6FE] prose-h2:text-[#85ADFF] prose-h3:text-[#7DE9FF]">
-                      <ReactMarkdown>{selectedDoc.markdown}</ReactMarkdown>
+                    <div className={s.emptyState}>
+                      <div className={s.emptyIcon}>⬡</div>
+                      <div>
+                        <p className={s.emptyTitle}>No diagrams yet</p>
+                        <p className={s.emptyDesc}>
+                          Generate System Architecture or Data Model to view
+                          diagrams
+                        </p>
+                      </div>
                     </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className={s.emptyState}>
-                <div className={s.emptyIcon}>◎</div>
-                <div>
-                  <p className={s.emptyTitle}>No document selected</p>
-                  <p className={s.emptyDesc}>
-                    Describe your project and run an agent to generate docs
-                  </p>
-                </div>
+                  )
+                ) : docOnlyDocs.length > 0 ? (
+                  <>
+                    <div className={s.docTabs}>
+                      {docOnlyDocs.map((doc) => (
+                        <button
+                          type="button"
+                          key={doc.agent}
+                          onClick={() => setSelectedDoc(doc)}
+                          className={`${s.docTab} ${activeDoc?.agent === doc.agent ? s.docTabActive : ""}`}
+                        >
+                          {doc.agent.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                    {activeDoc && (
+                      <div className={s.docContent}>
+                        <div className={s.docHeader}>
+                          <div>
+                            <h1 className={s.docTitle}>{activeDoc.agent}</h1>
+                            <p className={s.docSubtitle}>
+                              v1.0 · Generated by DocGenix AI
+                            </p>
+                          </div>
+                          <button
+                            className={s.btnRegenerate}
+                            onClick={() => handleGenerate(activeDoc.agent)}
+                            disabled={genLoading}
+                            title="Regenerate this document"
+                          >
+                            ↻ Regenerate
+                          </button>
+                        </div>
+                        <div className="prose prose-invert prose-sm max-w-3xl prose-headings:text-[#F4F6FE] prose-p:text-[#A8ABB2] prose-li:text-[#A8ABB2] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded prose-pre:bg-[#21262E] prose-pre:border prose-pre:border-[#44484E] prose-a:text-[#85ADFF] prose-strong:text-[#F4F6FE] prose-h2:text-[#85ADFF] prose-h3:text-[#7DE9FF]">
+                          <ReactMarkdown>{activeDoc.markdown}</ReactMarkdown>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className={s.emptyState}>
+                    <div className={s.emptyIcon}>◎</div>
+                    <div>
+                      <p className={s.emptyTitle}>No document selected</p>
+                      <p className={s.emptyDesc}>
+                        Describe your project and run an agent to generate docs
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            );
+          })()}
 
           {/* ── Right Panel: AI Assistant ── */}
-          <div className={s.chatPanel}>
+          <div className={`${s.chatPanel} ${chatOpen ? "" : s.chatPanelCollapsed}`}>
             <div className={s.chatHeader}>
-              <span className={s.chatHeaderLabel}>AI ASSISTANT</span>
-              <div className={s.chatHeaderRight}>
-                {activeCount > 0 && (
-                  <span className={s.chatActiveBadge}>
-                    {activeCount} Active
-                  </span>
-                )}
-                <div
-                  className={`${s.chatStatusDot} ${projectId !== null ? s.chatStatusDotActive : ""}`}
-                />
-              </div>
+              <button
+                type="button"
+                className={s.chatCollapseBtn}
+                onClick={() => setChatOpen((v) => !v)}
+                title={chatOpen ? "Collapse chat" : "Expand chat"}
+              >
+                <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"
+                  className={chatOpen ? s.chevronOpen : s.chevronClosed}>
+                  <path d="M9.78 12.78a.75.75 0 01-1.06 0L4.47 8.53a.75.75 0 010-1.06l4.25-4.25a.749.749 0 111.06 1.06L6.06 8l3.72 3.72a.75.75 0 010 1.06z" />
+                </svg>
+              </button>
+              {chatOpen && <span className={s.chatHeaderLabel}>AI ASSISTANT</span>}
+              {chatOpen && (
+                <div className={s.chatHeaderRight}>
+                  {activeCount > 0 && (
+                    <span className={s.chatActiveBadge}>{activeCount} Active</span>
+                  )}
+                  <div className={`${s.chatStatusDot} ${projectId !== null ? s.chatStatusDotActive : ""}`} />
+                </div>
+              )}
             </div>
 
-            {projectId === null && (
+            {chatOpen && projectId === null && (
               <div className={s.chatWarning}>
                 Create or select a project to start chatting
               </div>
             )}
 
-            <div className={s.chatMessages}>
-              {chatMessages.length === 0 && projectId !== null && (
-                <div className={s.chatEmpty}>
-                  Ask about your project or
-                  <br />
-                  request document changes
-                </div>
-              )}
-              {chatMessages.map((msg, i) => (
-                <div
-                  key={i}
-                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                >
-                  {msg.role === "assistant" && (
-                    <div className={s.chatAvatar}>D</div>
+            {chatOpen && (
+              <>
+                <div className={s.chatMessages}>
+                  {chatMessages.length === 0 && projectId !== null && (
+                    <div className={s.chatEmpty}>
+                      Ask about your project or
+                      <br />
+                      request document changes
+                    </div>
                   )}
-                  <div
-                    className={msg.role === "user" ? s.msgUser : s.msgAssistant}
-                  >
-                    {msg.role === "assistant" ? (
-                      <div className="prose prose-invert prose-xs max-w-none prose-p:my-1 prose-li:my-0.5 prose-headings:text-[#F4F6FE] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded">
-                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  {chatMessages.map((msg, i) => (
+                    <div
+                      key={i}
+                      className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                    >
+                      {msg.role === "assistant" && (
+                        <div className={s.chatAvatar}>D</div>
+                      )}
+                      <div className={msg.role === "user" ? s.msgUser : s.msgAssistant}>
+                        {msg.role === "assistant" ? (
+                          <div className="prose prose-invert prose-xs max-w-none prose-p:my-1 prose-li:my-0.5 prose-headings:text-[#F4F6FE] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded">
+                            <ReactMarkdown>{msg.content}</ReactMarkdown>
+                          </div>
+                        ) : (
+                          msg.content
+                        )}
                       </div>
-                    ) : (
-                      msg.content
-                    )}
-                  </div>
+                    </div>
+                  ))}
+                  {chatLoading && chatMessages[chatMessages.length - 1]?.role !== "assistant" && (
+                    <div className="flex justify-start">
+                      <div className={s.chatAvatar}>D</div>
+                      <div className={s.typingIndicator}>
+                        <span className={`${s.typingDot} animate-bounce [animation-delay:0ms]`} />
+                        <span className={`${s.typingDot} animate-bounce [animation-delay:150ms]`} />
+                        <span className={`${s.typingDot} animate-bounce [animation-delay:300ms]`} />
+                      </div>
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
                 </div>
-              ))}
-              {chatLoading && chatMessages[chatMessages.length - 1]?.role !== "assistant" && (
-                <div className="flex justify-start">
-                  <div className={s.chatAvatar}>D</div>
-                  <div className={s.typingIndicator}>
-                    <span
-                      className={`${s.typingDot} animate-bounce [animation-delay:0ms]`}
-                    />
-                    <span
-                      className={`${s.typingDot} animate-bounce [animation-delay:150ms]`}
-                    />
-                    <span
-                      className={`${s.typingDot} animate-bounce [animation-delay:300ms]`}
-                    />
-                  </div>
-                </div>
-              )}
-              <div ref={chatEndRef} />
-            </div>
 
-            <div className={s.chatInputArea}>
-              <input
-                type="text"
-                className={s.chatInput}
-                placeholder={
-                  projectId === null
-                    ? "Select a project first…"
-                    : "Message DocGenix…"
-                }
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleChat()}
-                disabled={projectId === null || chatLoading}
-              />
-              <button
-                type="button"
-                onClick={handleChat}
-                disabled={
-                  projectId === null || chatLoading || !chatInput.trim()
-                }
-                title="Send"
-                className={s.btnChatSend}
-              >
-                <IconSend />
-              </button>
-            </div>
+                <div className={s.chatInputArea}>
+                  <input
+                    type="text"
+                    className={s.chatInput}
+                    placeholder={projectId === null ? "Select a project first…" : "Message DocGenix…"}
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleChat()}
+                    disabled={projectId === null || chatLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleChat}
+                    disabled={projectId === null || chatLoading || !chatInput.trim()}
+                    title="Send"
+                    className={s.btnChatSend}
+                  >
+                    <IconSend />
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
