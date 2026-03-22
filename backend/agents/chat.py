@@ -3,15 +3,15 @@ Chat agent — handles the conversational interview / refinement flow.
 Also provides context extraction and readiness checking.
 """
 
-from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
 from ddgs import DDGS
 
-from agents.base import OLLAMA_BASE_URL, _ollama_kwargs
+from agents.base import MODEL, _asi1_kwargs
 from agents.project_overview import make_agent as make_overview_agent
 
-CHAT_MODEL = "qwen3.5:latest"
-EXTRACT_MODEL = "llama3.2:3b"
+CHAT_MODEL = MODEL
+EXTRACT_MODEL = MODEL
 REQUIRED_FIELDS = ["project_name", "platform", "features", "tech_stack", "audience"]
 
 CHAT_SYSTEM_PROMPT = """You are a helpful assistant for a software project planning tool.
@@ -124,14 +124,14 @@ def build_chat_messages(
     return messages
 
 
-def make_chat_llm() -> ChatOllama:
-    """Return the ChatOllama instance with tools bound."""
-    return ChatOllama(**_ollama_kwargs(CHAT_MODEL)).bind_tools(TOOLS)
+def make_chat_llm() -> ChatOpenAI:
+    """Return the ChatOpenAI instance with tools bound."""
+    return ChatOpenAI(**_asi1_kwargs(CHAT_MODEL)).bind_tools(TOOLS)
 
 
-def make_chat_llm_plain() -> ChatOllama:
-    """Return the ChatOllama instance without tools (for streaming final response)."""
-    return ChatOllama(**_ollama_kwargs(CHAT_MODEL))
+def make_chat_llm_plain() -> ChatOpenAI:
+    """Return the ChatOpenAI instance without tools (for streaming final response)."""
+    return ChatOpenAI(**_asi1_kwargs(CHAT_MODEL))
 
 
 async def run_tool_calls(response) -> list[dict]:
@@ -197,7 +197,7 @@ async def extract_context(history: list[dict]) -> str | None:
     )
     prompt = EXTRACT_PROMPT.format(conversation=conversation)
 
-    llm = ChatOllama(**_ollama_kwargs(EXTRACT_MODEL))
+    llm = ChatOpenAI(**_asi1_kwargs(EXTRACT_MODEL))
     result = await llm.ainvoke([{"role": "user", "content": prompt}])
     context = str(result.content).strip()
     return context or None
