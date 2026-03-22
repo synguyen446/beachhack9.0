@@ -20,20 +20,31 @@ function IconSend() {
   );
 }
 
-function IconPlus() {
-  return (
-    <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14">
-      <path d="M8 2a.75.75 0 01.75.75v4.5h4.5a.75.75 0 010 1.5h-4.5v4.5a.75.75 0 01-1.5 0v-4.5h-4.5a.75.75 0 010-1.5h4.5v-4.5A.75.75 0 018 2z" />
-    </svg>
-  );
-}
+const TITLES = [
+  "It works on my machine. Let's document it.",
+  "Let's pretend this was planned all along.",
+  "Good code deserves good docs, Let's fix that.",
+  "404: Excuses not found. Start building.",
+  "undefined is not a feature, Let's plan this right.",
+];
 
 export default function LandingPage() {
   const router = useRouter();
   const [prompt, setPrompt] = useState("");
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectNames, setProjectNames] = useState<Record<number, string>>({});
+  const [title, setTitle] = useState(TITLES[0]);
 
   useEffect(() => {
+    setTitle(TITLES[Math.floor(Math.random() * TITLES.length)]);
+  }, []);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("docgenix_names");
+      if (stored) setProjectNames(JSON.parse(stored) as Record<number, string>);
+    } catch {}
+
     async function fetchProjects() {
       try {
         const res = await fetch(`${API_URL}/projects`);
@@ -56,10 +67,10 @@ export default function LandingPage() {
     <div className={s.shell}>
       <aside className={s.sidebar}>
         <div className={s.sidebarBrand}>
-          <div className={s.brandMark}>D</div>
+          <img src="/icon.png" alt="DocGenix" className={s.brandMark} />
           <div className={s.brandText}>
             <div className={s.brandName}>DocGenix</div>
-            <div className={s.brandSubtitle}>AI WORKSPACE</div>
+            <div className={s.brandSubtitle}>SOFTWARE DOCS</div>
           </div>
         </div>
         <div className={s.sidebarSection}>RECENTS</div>
@@ -77,23 +88,24 @@ export default function LandingPage() {
                   title={proj.idea}
                   onClick={() => router.push(`/app?project=${proj.id}`)}
                 >
-                  {proj.idea}
+                  {projectNames[proj.id] ?? proj.idea}
                 </button>
               ))
           )}
         </div>
       </aside>
       <div className={s.page}>
-        <div className={s.heroGlow} aria-hidden="true" />
+        <div className={s.heroGlow} aria-hidden="true">
+          <div className={s.glowOrb1} />
+          <div className={s.glowOrb2} />
+          <div className={s.glowBeam} />
+        </div>
         <main className={s.center}>
-          <h1 className={s.title}>What&apos;s on the agenda today?</h1>
+          <h1 className={s.title}>{title}</h1>
           <div className={s.inputShell}>
-            <button type="button" className={s.addBtn} aria-label="Add">
-              <IconPlus />
-            </button>
             <input
               className={s.input}
-              placeholder="Describe your software project..."
+              placeholder="Describe your software project here!"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
@@ -109,7 +121,6 @@ export default function LandingPage() {
               <IconSend />
             </button>
           </div>
-          <div className={s.chip}>Company knowledge</div>
         </main>
       </div>
     </div>

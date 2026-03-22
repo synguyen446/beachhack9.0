@@ -9,11 +9,13 @@ import {
   ReactFlow,
   Background,
   Controls,
+  ControlButton,
   MiniMap,
   Handle,
   Position,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   MarkerType,
   type Node,
   type Edge,
@@ -164,6 +166,17 @@ function computeLayout(rawNodes: ERNodeData[]): Node[] {
   return nodes;
 }
 
+function FitViewButton() {
+  const { fitView } = useReactFlow();
+  return (
+    <ControlButton onClick={() => fitView({ padding: 0.2 })} title="Fit view">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+        <rect x="1" y="1" width="10" height="10" rx="1" stroke="currentColor" strokeWidth="1.5" />
+      </svg>
+    </ControlButton>
+  );
+}
+
 export const ERDiagram = forwardRef<DiagramRef, { nodes: ERNodeData[]; edges: EREdgeData[] }>(
   function ERDiagram({ nodes: rawNodes, edges: rawEdges }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -214,7 +227,9 @@ export const ERDiagram = forwardRef<DiagramRef, { nodes: ERNodeData[]; edges: ER
           fitViewOptions={{ padding: 0.2 }}
         >
           <Background color="#1a2030" gap={24} size={1} />
-          <Controls />
+          <Controls showFitView={false}>
+            <FitViewButton />
+          </Controls>
           <MiniMap
             nodeColor={() => "#78350f"}
             style={{ background: "#0f172a" }}

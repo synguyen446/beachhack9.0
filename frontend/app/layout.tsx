@@ -11,6 +11,7 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "DocGenix — AI-Powered Software Docs",
   description: "Generate complete software documentation with AI agents",
+  icons: { icon: "/icon.png" },
 };
 
 export default function RootLayout({

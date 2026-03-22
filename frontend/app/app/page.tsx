@@ -870,10 +870,10 @@ export default function Home() {
         ) : (
           <>
             <div className={s.sidebarBrand}>
-              <div className={s.brandLogo}>D</div>
+              <img src="/icon.png" alt="DocGenix" className={s.brandLogo} />
               <div className={s.brandText}>
                 <div className={s.brandName}>DocGenix</div>
-                <div className={s.brandSubtitle}>AI WORKSPACE</div>
+                <div className={s.brandSubtitle}>SOFTWARE DOCS</div>
               </div>
               <button
                 type="button"

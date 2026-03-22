@@ -68,8 +68,7 @@
 .page {
   flex: 1;
   min-height: 100vh;
-  background: radial-gradient(1200px 600px at 50% -10%, rgba(133, 173, 255, 0.08), transparent 60%),
-    #0A0E13;
+  background: #0A0E13;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -79,28 +78,111 @@
 
 .heroGlow {
   position: absolute;
-  top: -160px;
-  left: 50%;
-  width: 720px;
-  height: 420px;
-  transform: translateX(-50%);
-  background: radial-gradient(circle, rgba(193, 128, 255, 0.16), transparent 70%);
-  filter: blur(10px);
-  opacity: 0.9;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
+  z-index: 0;
+}
+
+/* Purple orb — left of center */
+.glowOrb1 {
+  position: absolute;
+  top: -120px;
+  left: 38%;
+  width: 800px;
+  height: 800px;
+  transform: translateX(-50%);
+  background: radial-gradient(circle,
+    rgba(168, 85, 247, 0.22) 0%,
+    rgba(168, 85, 247, 0.16) 15%,
+    rgba(168, 85, 247, 0.09) 35%,
+    rgba(168, 85, 247, 0.04) 52%,
+    rgba(168, 85, 247, 0.01) 63%,
+    transparent 70%
+  );
+  filter: blur(80px);
+  will-change: transform;
+  animation: orbDrift1 40s ease-in-out infinite;
+}
+
+/* Indigo orb — right of center */
+.glowOrb2 {
+  position: absolute;
+  top: -100px;
+  left: 62%;
+  width: 700px;
+  height: 700px;
+  transform: translateX(-50%);
+  background: radial-gradient(circle,
+    rgba(34, 211, 238, 0.16) 0%,
+    rgba(34, 211, 238, 0.11) 15%,
+    rgba(34, 211, 238, 0.06) 35%,
+    rgba(34, 211, 238, 0.02) 52%,
+    rgba(34, 211, 238, 0.005) 63%,
+    transparent 70%
+  );
+  filter: blur(80px);
+  will-change: transform;
+  animation: orbDrift2 50s ease-in-out infinite;
+}
+
+/* Third orb — warm violet, center */
+.glowBeam {
+  position: absolute;
+  top: -80px;
+  left: 50%;
+  width: 650px;
+  height: 650px;
+  transform: translateX(-50%);
+  background: radial-gradient(circle,
+    rgba(232, 121, 249, 0.13) 0%,
+    rgba(232, 121, 249, 0.09) 15%,
+    rgba(232, 121, 249, 0.05) 35%,
+    rgba(232, 121, 249, 0.02) 52%,
+    rgba(232, 121, 249, 0.005) 63%,
+    transparent 70%
+  );
+  filter: blur(75px);
+  will-change: transform;
+  animation: beamDrift 36s ease-in-out infinite;
+}
+
+/* Orb1 — purple, stays near prompt box */
+@keyframes orbDrift1 {
+  0%   { transform: translateX(-50%) translate(0px,   0px)  scale(1);    }
+  25%  { transform: translateX(-50%) translate(60px,  80px) scale(1.05); }
+  50%  { transform: translateX(-50%) translate(-40px, 140px) scale(0.97);}
+  75%  { transform: translateX(-50%) translate(-70px,  50px) scale(1.03);}
+  100% { transform: translateX(-50%) translate(0px,   0px)  scale(1);    }
+}
+
+/* Orb2 — cyan, roams freely across the whole page */
+@keyframes orbDrift2 {
+  0%   { transform: translateX(-50%) translate(0px,     0px)   scale(1);    }
+  20%  { transform: translateX(-50%) translate(-220px, 300px)  scale(0.95); }
+  40%  { transform: translateX(-50%) translate(-80px,  550px)  scale(1.08); }
+  60%  { transform: translateX(-50%) translate(180px,  400px)  scale(0.96); }
+  80%  { transform: translateX(-50%) translate(260px,  100px)  scale(1.04); }
+  100% { transform: translateX(-50%) translate(0px,     0px)   scale(1);    }
+}
+
+/* Orb3 — fuchsia, stays near prompt box, offset from orb1 */
+@keyframes beamDrift {
+  0%   { transform: translateX(-50%) translate(0px,   0px)   scale(1);    }
+  25%  { transform: translateX(-50%) translate(-60px, 100px) scale(1.04); }
+  50%  { transform: translateX(-50%) translate(50px,  160px) scale(0.96); }
+  75%  { transform: translateX(-50%) translate(80px,   60px) scale(1.02); }
+  100% { transform: translateX(-50%) translate(0px,   0px)   scale(1);    }
 }
 
 .brandMark {
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+  flex-shrink: 0;
   border-radius: 6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  color: #0A0E13;
-  background: linear-gradient(135deg, #85ADFF, #C180FF);
-  box-shadow: 0 10px 20px rgba(133, 173, 255, 0.2);
 }
 
 .brandText {
@@ -175,10 +257,16 @@
   color: #E2E8F0;
   font-size: 14px;
   outline: none;
+  text-align: center;
 }
+
 
 .input::placeholder {
   color: #7C8796;
+}
+
+.input:focus::placeholder {
+  color: transparent;
 }
 
 .sendBtn {
