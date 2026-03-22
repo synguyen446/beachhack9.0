@@ -113,7 +113,6 @@ export default function Home() {
   const [idea, setIdea] = useState("");
   const [projectId, setProjectId] = useState<number | null>(null);
   const [docs, setDocs] = useState<GeneratedDoc[]>([]);
-  const [genStatus, setGenStatus] = useState("");
   const [genLoading, setGenLoading] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<GeneratedDoc | null>(null);
   const [activeAgents, setActiveAgents] = useState<Set<string>>(new Set());
@@ -130,6 +129,7 @@ export default function Home() {
   const [projectNames, setProjectNames] = useState<Record<number, string>>({});
 
   const [outputMode, setOutputMode] = useState<"docs" | "diagrams">("docs");
+  const [chatOpen, setChatOpen] = useState(true);
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [copyDone, setCopyDone] = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
@@ -190,7 +190,6 @@ export default function Home() {
       setChatMessages([]);
       setDocs([]);
       setSelectedDoc(null);
-      setGenStatus("");
       pushRecent(id);
 
       try {
@@ -309,7 +308,6 @@ export default function Home() {
     const myProjId = projectId;
     setGenLoading(true);
     setActiveAgents(agent === "all" ? new Set(AGENTS) : new Set([agent]));
-    setGenStatus(agent === "all" ? "Running all agents…" : `Running ${agent}…`);
 
     try {
       const res = await fetch(`${API_URL}/generate`, {
@@ -342,9 +340,6 @@ export default function Home() {
               fetchProjects();
             } else if (data.type === "status") {
               // Only update UI status if we're still on this project
-              if (projectIdRef.current === currentProjId) {
-                setGenStatus(data.message || `Running ${data.agent}…`);
-              }
             } else if (data.type === "result") {
               const newDoc: GeneratedDoc = {
                 agent: data.agent,
@@ -370,12 +365,8 @@ export default function Home() {
                 });
               }
             } else if (data.type === "error") {
-              if (projectIdRef.current === currentProjId) {
-                setGenStatus(`Error: ${data.message}`);
-              }
             } else if (data.type === "done") {
               if (projectIdRef.current === currentProjId) {
-                setGenStatus("All documents generated");
                 setActiveAgents(new Set());
               }
             }
@@ -384,10 +375,7 @@ export default function Home() {
           }
         }
       }
-    } catch (err) {
-      if (projectIdRef.current === myProjId) {
-        setGenStatus(`Error: ${err}`);
-      }
+    } catch {
     } finally {
       if (projectIdRef.current === myProjId) {
         setGenLoading(false);
@@ -501,7 +489,6 @@ export default function Home() {
     setChatMessages([]);
     setDocs([]);
     setSelectedDoc(null);
-    setGenStatus("");
     setActiveAgents(new Set());
   }
 
@@ -511,8 +498,6 @@ export default function Home() {
     fetchProjects();
   }
   const activeCount = activeAgents.size;
-  const isError = genStatus.startsWith("Error");
-  const isAllDone = genStatus === "All documents generated";
 
   function handleDownloadZip() {
     if (projectId === null) return;
@@ -574,7 +559,6 @@ export default function Home() {
                       className={`${s.projectItem} ${projectId === proj.id ? s.projectItemActive : ""}`}
                       title={proj.idea}
                     >
-                      <span className={s.projectId}>#{proj.id}</span>
                       {projectNames[proj.id] || proj.idea}
                     </button>
                     <button
@@ -668,10 +652,8 @@ export default function Home() {
               <div className={s.promptWrapper}>
                 <textarea
                   className={s.promptTextarea}
-                  rows={6}
-                  placeholder={
-                    'Describe your software project...\ne.g. "A scalable microservices platform for e-commerce using Kafka and Go."'
-                  }
+                  rows={3}
+                  placeholder={"Describe your software project here!"}
                   value={idea}
                   onChange={(e) => setIdea(e.target.value)}
                 />
@@ -725,19 +707,6 @@ export default function Home() {
               )}
             </button>
 
-            {/* AI Context card */}
-            {genStatus && (
-              <div
-                className={`${s.aiContextCard} ${isError ? s.aiContextCardError : isAllDone ? s.aiContextCardSuccess : ""}`}
-              >
-                <div className={s.aiContextLabel}>AI CONTEXT</div>
-                <div
-                  className={`${s.aiContextText} ${isError ? s.aiContextTextError : isAllDone ? s.aiContextTextSuccess : ""}`}
-                >
-                  {genStatus}
-                </div>
-              </div>
-            )}
 
             {/* Agents list */}
             <div>
@@ -799,10 +768,7 @@ export default function Home() {
           {/* ── Center: Doc Viewer ── */}
           {(() => {
             const diagramDocs = docs.filter(
-              (d) =>
-                DIAGRAM_AGENTS.includes(d.agent) &&
-                d.nodes &&
-                d.nodes.length > 0,
+              (d) => DIAGRAM_AGENTS.includes(d.agent),
             );
             const activeDiagram =
               diagramDocs.find((d) => d.agent === selectedDoc?.agent) ??
@@ -834,25 +800,22 @@ export default function Home() {
                         ))}
                       </div>
                       {activeDiagram && (
-                        <div className={s.docContent}>
-                          <h1 className={s.docTitle}>{activeDiagram.agent}</h1>
-                          <p className={s.docSubtitle}>
-                            v1.0 · Generated by DocGenix AI
-                          </p>
-                          <ArchitectureDiagram
-                            nodes={activeDiagram.nodes!}
-                            edges={activeDiagram.edges ?? []}
-                          />
-                          <details className="mt-6">
-                            <summary className={s.rawMdToggle}>
-                              VIEW RAW MARKDOWN
-                            </summary>
-                            <div className="mt-4 prose prose-invert prose-sm max-w-3xl prose-headings:text-[#F4F6FE] prose-p:text-[#A8ABB2] prose-li:text-[#A8ABB2] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded prose-pre:bg-[#21262E] prose-pre:border prose-pre:border-[#44484E] prose-a:text-[#85ADFF] prose-strong:text-[#F4F6FE] prose-h2:text-[#85ADFF]">
-                              <ReactMarkdown>
-                                {activeDiagram.markdown}
-                              </ReactMarkdown>
+                        <div className={s.diagramPanel}>
+                          {activeDiagram.nodes && activeDiagram.nodes.length > 0 ? (
+                            <ArchitectureDiagram
+                              key={activeDiagram.agent}
+                              nodes={activeDiagram.nodes}
+                              edges={activeDiagram.edges ?? []}
+                            />
+                          ) : (
+                            <div className={s.emptyState}>
+                              <div className={s.emptyIcon}>⬡</div>
+                              <div>
+                                <p className={s.emptyTitle}>No diagram yet</p>
+                                <p className={s.emptyDesc}>Regenerate {activeDiagram.agent} to produce the visual diagram</p>
+                              </div>
                             </div>
-                          </details>
+                          )}
                         </div>
                       )}
                     </>
@@ -910,102 +873,100 @@ export default function Home() {
           })()}
 
           {/* ── Right Panel: AI Assistant ── */}
-          <div className={s.chatPanel}>
+          <div className={`${s.chatPanel} ${chatOpen ? "" : s.chatPanelCollapsed}`}>
             <div className={s.chatHeader}>
-              <span className={s.chatHeaderLabel}>AI ASSISTANT</span>
-              <div className={s.chatHeaderRight}>
-                {activeCount > 0 && (
-                  <span className={s.chatActiveBadge}>
-                    {activeCount} Active
-                  </span>
-                )}
-                <div
-                  className={`${s.chatStatusDot} ${projectId !== null ? s.chatStatusDotActive : ""}`}
-                />
-              </div>
+              <button
+                type="button"
+                className={s.chatCollapseBtn}
+                onClick={() => setChatOpen((v) => !v)}
+                title={chatOpen ? "Collapse chat" : "Expand chat"}
+              >
+                <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"
+                  className={chatOpen ? s.chevronOpen : s.chevronClosed}>
+                  <path d="M9.78 12.78a.75.75 0 01-1.06 0L4.47 8.53a.75.75 0 010-1.06l4.25-4.25a.749.749 0 111.06 1.06L6.06 8l3.72 3.72a.75.75 0 010 1.06z" />
+                </svg>
+              </button>
+              {chatOpen && <span className={s.chatHeaderLabel}>AI ASSISTANT</span>}
+              {chatOpen && (
+                <div className={s.chatHeaderRight}>
+                  {activeCount > 0 && (
+                    <span className={s.chatActiveBadge}>{activeCount} Active</span>
+                  )}
+                  <div className={`${s.chatStatusDot} ${projectId !== null ? s.chatStatusDotActive : ""}`} />
+                </div>
+              )}
             </div>
 
-            {projectId === null && (
+            {chatOpen && projectId === null && (
               <div className={s.chatWarning}>
                 Create or select a project to start chatting
               </div>
             )}
 
-            <div className={s.chatMessages}>
-              {chatMessages.length === 0 && projectId !== null && (
-                <div className={s.chatEmpty}>
-                  Ask about your project or
-                  <br />
-                  request document changes
-                </div>
-              )}
-              {chatMessages.map((msg, i) => (
-                <div
-                  key={i}
-                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                >
-                  {msg.role === "assistant" && (
-                    <div className={s.chatAvatar}>D</div>
-                  )}
-                  <div
-                    className={msg.role === "user" ? s.msgUser : s.msgAssistant}
-                  >
-                    {msg.role === "assistant" ? (
-                      <div className="prose prose-invert prose-xs max-w-none prose-p:my-1 prose-li:my-0.5 prose-headings:text-[#F4F6FE] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded">
-                        <ReactMarkdown>{msg.content}</ReactMarkdown>
-                      </div>
-                    ) : (
-                      msg.content
-                    )}
-                  </div>
-                </div>
-              ))}
-              {chatLoading &&
-                chatMessages[chatMessages.length - 1]?.role !== "assistant" && (
-                  <div className="flex justify-start">
-                    <div className={s.chatAvatar}>D</div>
-                    <div className={s.typingIndicator}>
-                      <span
-                        className={`${s.typingDot} animate-bounce [animation-delay:0ms]`}
-                      />
-                      <span
-                        className={`${s.typingDot} animate-bounce [animation-delay:150ms]`}
-                      />
-                      <span
-                        className={`${s.typingDot} animate-bounce [animation-delay:300ms]`}
-                      />
+            {chatOpen && (
+              <>
+                <div className={s.chatMessages}>
+                  {chatMessages.length === 0 && projectId !== null && (
+                    <div className={s.chatEmpty}>
+                      Ask about your project or
+                      <br />
+                      request document changes
                     </div>
-                  </div>
-                )}
-              <div ref={chatEndRef} />
-            </div>
+                  )}
+                  {chatMessages.map((msg, i) => (
+                    <div
+                      key={i}
+                      className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                    >
+                      {msg.role === "assistant" && (
+                        <div className={s.chatAvatar}>D</div>
+                      )}
+                      <div className={msg.role === "user" ? s.msgUser : s.msgAssistant}>
+                        {msg.role === "assistant" ? (
+                          <div className="prose prose-invert prose-xs max-w-none prose-p:my-1 prose-li:my-0.5 prose-headings:text-[#F4F6FE] prose-code:text-[#C180FF] prose-code:bg-[#21262E] prose-code:px-1 prose-code:rounded">
+                            <ReactMarkdown>{msg.content}</ReactMarkdown>
+                          </div>
+                        ) : (
+                          msg.content
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {chatLoading && chatMessages[chatMessages.length - 1]?.role !== "assistant" && (
+                    <div className="flex justify-start">
+                      <div className={s.chatAvatar}>D</div>
+                      <div className={s.typingIndicator}>
+                        <span className={`${s.typingDot} animate-bounce [animation-delay:0ms]`} />
+                        <span className={`${s.typingDot} animate-bounce [animation-delay:150ms]`} />
+                        <span className={`${s.typingDot} animate-bounce [animation-delay:300ms]`} />
+                      </div>
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
 
-            <div className={s.chatInputArea}>
-              <input
-                type="text"
-                className={s.chatInput}
-                placeholder={
-                  projectId === null
-                    ? "Select a project first…"
-                    : "Message DocGenix…"
-                }
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleChat()}
-                disabled={projectId === null || chatLoading}
-              />
-              <button
-                type="button"
-                onClick={handleChat}
-                disabled={
-                  projectId === null || chatLoading || !chatInput.trim()
-                }
-                title="Send"
-                className={s.btnChatSend}
-              >
-                <IconSend />
-              </button>
-            </div>
+                <div className={s.chatInputArea}>
+                  <input
+                    type="text"
+                    className={s.chatInput}
+                    placeholder={projectId === null ? "Select a project first…" : "Message DocGenix…"}
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleChat()}
+                    disabled={projectId === null || chatLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleChat}
+                    disabled={projectId === null || chatLoading || !chatInput.trim()}
+                    title="Send"
+                    className={s.btnChatSend}
+                  >
+                    <IconSend />
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

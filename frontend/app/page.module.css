@@ -463,9 +463,12 @@
   font-family: inherit;
   outline: none;
   transition: border-color 0.15s;
+  overflow-y: auto;
 }
 .promptTextarea::placeholder { color: #475569; }
 .promptTextarea:focus { border-color: #85ADFF; }
+.promptTextarea::-webkit-scrollbar { width: 0; }
+.promptTextarea:hover::-webkit-scrollbar { width: 4px; }
 
 .promptSendBtn {
   position: absolute;
@@ -664,6 +667,12 @@
   background: #0A0E13;
 }
 
+.diagramPanel {
+  flex: 1;
+  overflow: hidden;
+  padding: 16px;
+}
+
 .docTabs {
   display: flex;
   align-items: flex-end;
@@ -787,22 +796,63 @@
   overflow: hidden;
   background: #151A20;
   border-left: 1px solid #44484E;
+  transition: width 0.2s ease;
+}
+
+.chatPanelCollapsed {
+  width: 50px;
+  align-self: flex-start;
+  border-bottom: 1px solid #44484E;
+}
+
+.chatCollapseBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: #475569;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.chatCollapseBtn:hover {
+  background: #1B2027;
+  border-color: #44484E;
+  color: #F4F6FE;
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+  transition: transform 0.2s ease;
+}
+.chevronClosed {
+  transform: rotate(0deg);
+  transition: transform 0.2s ease;
 }
 
 .chatHeader {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 18px 24px 14px;
+  gap: 10px;
+  padding: 14px 12px;
   border-bottom: 1px solid #44484E;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .chatHeaderLabel {
+  flex: 1;
   color: #94A3B8;
   font-weight: 700;
   font-size: 10px;
   letter-spacing: 1px;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .chatHeaderRight {
@@ -815,9 +865,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 32px;
+  align-self: stretch;
+  border-radius: 4px;
   background: transparent;
   border: none;
   color: #64748B;
@@ -865,10 +915,18 @@
 .chatMessages {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.chatMessages::-webkit-scrollbar {
+  width: 0;
+}
+.chatMessages:hover::-webkit-scrollbar {
+  width: 4px;
 }
 
 .chatEmpty {

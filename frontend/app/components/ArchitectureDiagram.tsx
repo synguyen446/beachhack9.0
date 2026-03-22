@@ -237,7 +237,7 @@ export function ArchitectureDiagram({
   const [edges, , onEdgesChange] = useEdgesState(rfEdges);
 
   return (
-    <div style={{ width: "100%", height: 520, background: "#0a0f1a", borderRadius: 12 }}>
+    <div style={{ width: "100%", height: "100%", background: "#0a0f1a", borderRadius: 12 }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
