@@ -189,6 +189,27 @@ export default function Home() {
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const diagramPanelRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  function toggleDiagramFullscreen() {
+    if (!diagramPanelRef.current) return;
+    if (!document.fullscreenElement) {
+      diagramPanelRef.current.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  }
+
+  useEffect(() => {
+    function onFullscreenChange() {
+      setIsFullscreen(!!document.fullscreenElement);
+    }
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
   const [mounted, setMounted] = useState(false);
 
   const [shareOpen, setShareOpen] = useState(false);
@@ -544,9 +565,8 @@ export default function Home() {
       if (!reader) return;
 
       let assistantMsg = "";
+      let streamingStarted = false;
       let buffer = "";
-
-      setChatMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
       while (true) {
         const { done, value } = await reader.read();
@@ -561,7 +581,16 @@ export default function Home() {
           try {
             const data = JSON.parse(line.slice(6));
             if (data.type === "token") {
-              assistantMsg += (data.content ?? "").replace(/<\/?think>/gi, "");
+              const token = (data.content ?? "").replace(/<\/?think>/gi, "");
+              if (!token) continue;
+              if (!streamingStarted) {
+                streamingStarted = true;
+                setChatMessages((prev) => [
+                  ...prev,
+                  { role: "assistant", content: "" },
+                ]);
+              }
+              assistantMsg += token;
               setChatMessages((prev) => {
                 const updated = [...prev];
                 updated[updated.length - 1] = {
@@ -1057,7 +1086,19 @@ export default function Home() {
                   diagramDocs.length > 0 ? (
                     <>
                       {activeDiagram && (
-                        <div className={s.diagramPanel}>
+                        <div className={s.diagramPanel} ref={diagramPanelRef}>
+                          <button
+                            type="button"
+                            className={s.btnFullscreen}
+                            onClick={toggleDiagramFullscreen}
+                            title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                          >
+                            {isFullscreen ? (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 0 2-2h3M3 16h3a2 2 0 0 0 2 2v3"/></svg>
+                            ) : (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                            )}
+                          </button>
                           {activeDiagram.agent === "Data Model" &&
                           activeDiagram.er_nodes &&
                           activeDiagram.er_nodes.length > 0 ? (

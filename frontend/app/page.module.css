@@ -408,6 +408,7 @@
 
 .shareWrapper {
   position: relative;
+  z-index: 9999;
 }
 
 .btnShare {
@@ -435,7 +436,7 @@
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   overflow: hidden;
-  z-index: 100;
+  z-index: 9999;
   animation: fadeInDown 0.12s ease;
 }
 
@@ -518,6 +519,7 @@
   display: flex;
   flex: 1;
   overflow: hidden;
+  position: relative;
 }
 
 /* ── Left Input Panel ───────────────────────────────────────────── */
@@ -815,6 +817,31 @@
   flex: 1;
   overflow: hidden;
   padding: 16px;
+  position: relative;
+  background: #0A0E13;
+}
+
+.btnFullscreen {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  z-index: 10;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1C2128;
+  border: 1px solid #2a3040;
+  border-radius: 6px;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btnFullscreen:hover {
+  background: #2D333B;
+  color: #F4F6FE;
 }
 
 .docTabs {
@@ -972,9 +999,14 @@
 }
 
 .chatPanelCollapsed {
+  position: absolute;
+  right: 0;
+  top: 0;
   width: 50px;
-  align-self: flex-start;
+  z-index: 20;
   border-bottom: 1px solid #44484E;
+  border-left: 1px solid #44484E;
+  background: #151A20;
 }
 
 .chatCollapseBtn {

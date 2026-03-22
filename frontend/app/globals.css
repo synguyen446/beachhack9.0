@@ -11,26 +11,28 @@
 }
 
 .react-flow__controls-button {
-  background: #151A20;
-  border-bottom: 1px solid #2a3040;
-  color: #94a3b8;
-  fill: #94a3b8;
-  width: 28px;
-  height: 28px;
+  background: #1C2128 !important;
+  border-bottom: 1px solid #2a3040 !important;
+  color: #F4F6FE !important;
+  fill: #F4F6FE !important;
+  width: 32px !important;
+  height: 32px !important;
 }
 
 .react-flow__controls-button:last-child {
-  border-bottom: none;
+  border-bottom: none !important;
 }
 
 .react-flow__controls-button:hover {
-  background: #21262E;
-  color: #F4F6FE;
-  fill: #F4F6FE;
+  background: #2D333B !important;
+  color: #ffffff !important;
+  fill: #ffffff !important;
 }
 
 .react-flow__controls-button svg {
-  fill: inherit;
+  fill: inherit !important;
+  max-width: 14px;
+  max-height: 14px;
 }
 
 :root {

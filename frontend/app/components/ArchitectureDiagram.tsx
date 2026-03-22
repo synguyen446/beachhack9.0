@@ -2,13 +2,16 @@
 
 import {
   ReactFlow,
+  ReactFlowProvider,
   Background,
   Controls,
+  ControlButton,
   MiniMap,
   Handle,
   Position,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   MarkerType,
   type Node,
   type Edge,
@@ -202,7 +205,7 @@ const nodeTypes: NodeTypes = {
   groupNode: GroupNode,
 };
 
-export function ArchitectureDiagram({
+function ArchitectureDiagramInner({
   nodes: rawNodes,
   edges: rawEdges,
 }: {
@@ -235,6 +238,7 @@ export function ArchitectureDiagram({
 
   const [nodes, , onNodesChange] = useNodesState(rfNodes);
   const [edges, , onEdgesChange] = useEdgesState(rfEdges);
+  const { fitView } = useReactFlow();
 
   return (
     <div style={{ width: "100%", height: "100%", background: "#0a0f1a", borderRadius: 12 }}>
@@ -248,7 +252,13 @@ export function ArchitectureDiagram({
         fitViewOptions={{ padding: 0.15 }}
       >
         <Background color="#1a2030" gap={24} size={1} />
-        <Controls />
+        <Controls showFitView={false}>
+          <ControlButton onClick={() => fitView({ padding: 0.15 })} title="Fit view">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <rect x="2" y="2" width="12" height="12" rx="1" />
+            </svg>
+          </ControlButton>
+        </Controls>
         <MiniMap
           nodeColor={(n) => {
             if (n.type === "groupNode") return "transparent";
@@ -258,5 +268,13 @@ export function ArchitectureDiagram({
         />
       </ReactFlow>
     </div>
+  );
+}
+
+export function ArchitectureDiagram(props: { nodes: ArchNode[]; edges: ArchEdge[] }) {
+  return (
+    <ReactFlowProvider>
+      <ArchitectureDiagramInner {...props} />
+    </ReactFlowProvider>
   );
 }
