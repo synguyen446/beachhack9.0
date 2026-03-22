@@ -3,7 +3,7 @@ ddgs
 langgraph
 langchain-community
 langchain-core
-langchain-ollama
+langchain-openai
 fastapi
 pydantic
 uvicorn[standard]
