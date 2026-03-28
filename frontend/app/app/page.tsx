@@ -193,7 +193,8 @@ export default function Home() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatEndRef   = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLInputElement>(null);
   const diagramPanelRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -458,6 +459,11 @@ export default function Home() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
+
+  // Restore focus to chat input when bot finishes replying
+  useEffect(() => {
+    if (!chatLoading) chatInputRef.current?.focus();
+  }, [chatLoading]);
 
   // Reset edit mode when switching documents
   useEffect(() => {
@@ -1027,6 +1033,12 @@ export default function Home() {
                       : undefined
                   }
                   onChange={(e) => !ideaLocked && setIdea(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey && !ideaLocked && idea.trim() && !chatLoading) {
+                      e.preventDefault();
+                      handleSubmitIdea();
+                    }
+                  }}
                 />
                 {!ideaLocked && (
                   <button
@@ -1072,7 +1084,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => handleGenerate("all")}
-                disabled={genLoading || !idea.trim()}
+                disabled={genLoading || !idea.trim() || !contextReady}
                 className={`${s.btnRunAll} ${contextReady && !genLoading ? s.btnRunAllReady : ""}`}
               >
                 {genLoading ? (
@@ -1084,6 +1096,11 @@ export default function Home() {
                   "Run All Agents"
                 )}
               </button>
+              {!contextReady && !genLoading && (
+                <p className={s.btnRunAllHint}>
+                  Finish the chat interview to unlock agents
+                </p>
+              )}
               {contextReady && !genLoading && (
                 <p className={s.btnRunAllHint}>
                   Ready — click to generate all docs
@@ -1139,8 +1156,9 @@ export default function Home() {
                           : handleGenerate(agent)
                       }
                       disabled={
-                        isActive || (!isDone && (genLoading || !idea.trim()))
+                        isActive || (!isDone && (genLoading || !idea.trim() || !contextReady))
                       }
+                      title={!contextReady && !isDone ? "Complete the chat interview first" : undefined}
                       className={itemClass}
                     >
                       <span className={iconClass}>
@@ -1429,6 +1447,7 @@ export default function Home() {
 
                 <div className={s.chatInputArea}>
                   <input
+                    ref={chatInputRef}
                     type="text"
                     className={s.chatInput}
                     placeholder={
@@ -1438,8 +1457,8 @@ export default function Home() {
                     }
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleChat()}
-                    disabled={projectId === null || chatLoading}
+                    onKeyDown={(e) => e.key === "Enter" && !chatLoading && handleChat()}
+                    disabled={projectId === null}
                   />
                   <button
                     type="button"

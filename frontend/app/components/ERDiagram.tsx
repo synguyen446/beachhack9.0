@@ -47,129 +47,180 @@ export interface EREdgeData {
   target_label: string;
 }
 
-// Layout constants
-const TABLE_W = 220;
-const ROW_H = 22;
-const HEADER_H = 32;
-const COLS_PER_ROW = 3;
-const GAP_X = 80;
-const GAP_Y = 60;
+const TABLE_W  = 260;
+const ROW_H    = 24;
+const HEADER_H = 36;
+;
+const GAP_X    = 120;
+const GAP_Y    = 80;
 
 function getTableHeight(columns: ERColumn[]): number {
-  return HEADER_H + Math.max(columns.length, 1) * ROW_H + 8;
+  return HEADER_H + Math.max(columns.length, 1) * ROW_H + 12;
 }
 
-function isPK(constraints: string) {
-  return /\bPK\b/i.test(constraints);
-}
-
-function isFK(constraints: string) {
-  return /\bFK\b/i.test(constraints);
-}
+function isPK(c: string) { return /\bPK\b/i.test(c); }
+function isFK(c: string) { return /\bFK\b/i.test(c); }
 
 function TableNode({ data }: { data: Record<string, unknown> }) {
-  const label = data.label as string;
+  const label   = data.label as string;
   const columns = (data.columns as ERColumn[]) ?? [];
-  const height = getTableHeight(columns);
 
   return (
-    <div
-      style={{ width: TABLE_W, height, minHeight: HEADER_H + ROW_H }}
-      className="rounded-lg overflow-hidden border border-amber-500/30 bg-zinc-900/90 shadow-lg shadow-black/30"
-    >
-      <Handle
-        type="target"
-        position={Position.Left}
-        style={{ background: "#f59e0b", width: 7, height: 7, top: HEADER_H / 2 }}
-      />
-      <Handle
-        type="source"
-        position={Position.Right}
-        style={{ background: "#f59e0b", width: 7, height: 7, top: HEADER_H / 2 }}
-      />
+    <div style={{ width: TABLE_W, minHeight: HEADER_H + ROW_H, background: "#111827", borderRadius: 12, overflow: "hidden", border: "1px solid rgba(245,158,11,0.2)", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
+      {/* Handles on all 4 sides so ReactFlow can route edges cleanly */}
+      <Handle type="target" position={Position.Top}    id="t" style={{ background: "#f59e0b", width: 6, height: 6, left: "50%" }} />
+      <Handle type="source" position={Position.Bottom} id="b" style={{ background: "#f59e0b", width: 6, height: 6, left: "50%" }} />
+      <Handle type="target" position={Position.Left}   id="l" style={{ background: "#f59e0b", width: 6, height: 6, top: HEADER_H / 2 }} />
+      <Handle type="source" position={Position.Right}  id="r" style={{ background: "#f59e0b", width: 6, height: 6, top: HEADER_H / 2 }} />
 
       {/* Header */}
-      <div
-        className="flex items-center gap-1.5 px-2.5 font-semibold text-[12px] text-amber-200 tracking-wide"
-        style={{
-          height: HEADER_H,
-          background: "linear-gradient(135deg, #78350f 0%, #451a03 100%)",
-          borderBottom: "1px solid rgba(245,158,11,0.25)",
-        }}
-      >
-        <span>🗄</span>
-        {label}
+      <div style={{
+        height: HEADER_H,
+        background: "linear-gradient(135deg, #92400e 0%, #451a03 100%)",
+        borderBottom: "1px solid rgba(245,158,11,0.2)",
+        display: "flex", alignItems: "center", gap: 8, padding: "0 12px",
+      }}>
+        <span style={{ fontSize: 13 }}>🗄</span>
+        <span style={{ color: "#fcd34d", fontWeight: 700, fontSize: 12, letterSpacing: "0.03em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {label}
+        </span>
       </div>
 
+      {/* Divider */}
+      <div style={{ height: 1, background: "rgba(245,158,11,0.1)" }} />
+
       {/* Columns */}
-      <div className="px-1.5 py-1">
-        {columns.length > 0 ? (
-          columns.map((col, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-1 px-1.5 rounded text-[10px] leading-none"
-              style={{ height: ROW_H }}
-            >
-              {/* Constraint badge */}
-              {isPK(col.constraints) ? (
-                <span className="text-[8px] font-bold text-amber-400 w-[18px] shrink-0">PK</span>
-              ) : isFK(col.constraints) ? (
-                <span className="text-[8px] font-bold text-blue-400 w-[18px] shrink-0">FK</span>
-              ) : (
-                <span className="w-[18px] shrink-0" />
-              )}
-              {/* Name */}
-              <span className="font-medium text-zinc-200 truncate flex-1">{col.name}</span>
-              {/* Type */}
-              <span className="text-zinc-500 text-[9px] truncate max-w-[70px] text-right">
-                {col.type}
-              </span>
-            </div>
-          ))
-        ) : (
-          <div className="text-[10px] text-zinc-600 px-1.5 py-1">No columns</div>
+      <div style={{ padding: "6px 0" }}>
+        {columns.length > 0 ? columns.map((col, i) => (
+          <div key={i} style={{
+            display: "flex", alignItems: "center", gap: 6,
+            height: ROW_H, padding: "0 10px",
+            background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)",
+          }}>
+            {isPK(col.constraints) ? (
+              <span style={{ fontSize: 9, fontWeight: 800, color: "#fbbf24", width: 18, flexShrink: 0 }}>PK</span>
+            ) : isFK(col.constraints) ? (
+              <span style={{ fontSize: 9, fontWeight: 800, color: "#60a5fa", width: 18, flexShrink: 0 }}>FK</span>
+            ) : (
+              <span style={{ width: 18, flexShrink: 0 }} />
+            )}
+            <span style={{
+              fontSize: 11, color: isPK(col.constraints) ? "#fde68a" : isFK(col.constraints) ? "#bfdbfe" : "#d1d5db",
+              flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              fontWeight: isPK(col.constraints) ? 600 : 400,
+            }}>
+              {col.name}
+            </span>
+            <span style={{ fontSize: 9, color: "#4b5563", whiteSpace: "nowrap", maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis", textAlign: "right" }}>
+              {col.type}
+            </span>
+          </div>
+        )) : (
+          <div style={{ fontSize: 10, color: "#374151", padding: "4px 10px" }}>No columns</div>
         )}
       </div>
     </div>
   );
 }
 
-const nodeTypes: NodeTypes = {
-  tableNode: TableNode,
-};
+const nodeTypes: NodeTypes = { tableNode: TableNode };
 
-function computeLayout(rawNodes: ERNodeData[]): Node[] {
-  const nodes: Node[] = [];
+function computeLayout(rawNodes: ERNodeData[], rawEdges: EREdgeData[]): Node[] {
+  const ids = rawNodes.map((n) => n.id);
+  const nodeMap = new Map(rawNodes.map((n) => [n.id, n]));
 
-  for (let i = 0; i < rawNodes.length; i++) {
-    const n = rawNodes[i];
-    const col = i % COLS_PER_ROW;
-    const row = Math.floor(i / COLS_PER_ROW);
-    const height = getTableHeight(n.columns);
+  // Build adjacency and degree counts
+  const outEdges = new Map<string, Set<string>>();
+  const inDegree  = new Map<string, number>();
+  for (const id of ids) { outEdges.set(id, new Set()); inDegree.set(id, 0); }
 
-    // Stagger Y based on max height in the row for neat spacing
-    nodes.push({
-      id: n.id,
-      type: "tableNode",
-      position: {
-        x: 30 + col * (TABLE_W + GAP_X),
-        y: 30 + row * (200 + GAP_Y),
-      },
-      data: {
-        label: n.label,
-        columns: n.columns,
-      },
-      style: { width: TABLE_W, height },
+  for (const e of rawEdges) {
+    if (!outEdges.has(e.source) || !outEdges.has(e.target)) continue;
+    if (e.source === e.target) continue;
+    outEdges.get(e.source)!.add(e.target);
+    inDegree.set(e.target, (inDegree.get(e.target) ?? 0) + 1);
+  }
+
+  // Assign levels via BFS (Kahn-style, handles cycles by keeping unvisited nodes)
+  const level = new Map<string, number>();
+  const queue: string[] = [];
+
+  // Roots = nodes with no incoming edges
+  for (const id of ids) {
+    if ((inDegree.get(id) ?? 0) === 0) { queue.push(id); level.set(id, 0); }
+  }
+  // Fallback: if all nodes have incoming edges (pure cycle), start from most-referenced
+  if (queue.length === 0) {
+    const sorted = [...ids].sort((a, b) => (inDegree.get(b) ?? 0) - (inDegree.get(a) ?? 0));
+    queue.push(sorted[0]);
+    level.set(sorted[0], 0);
+  }
+
+  const remaining = new Map(inDegree);
+  let head = 0;
+  while (head < queue.length) {
+    const cur = queue[head++];
+    const curLevel = level.get(cur) ?? 0;
+    for (const neighbor of outEdges.get(cur) ?? []) {
+      const newIn = (remaining.get(neighbor) ?? 1) - 1;
+      remaining.set(neighbor, newIn);
+      const proposed = curLevel + 1;
+      if (!level.has(neighbor) || (level.get(neighbor) ?? 0) < proposed) {
+        level.set(neighbor, proposed);
+      }
+      if (newIn === 0) queue.push(neighbor);
+    }
+  }
+  // Any still-unvisited nodes (in cycles) get appended at the deepest level + 1
+  const maxLevel = Math.max(0, ...level.values());
+  for (const id of ids) {
+    if (!level.has(id)) level.set(id, maxLevel + 1);
+  }
+
+  // Group nodes by level
+  const byLevel = new Map<number, string[]>();
+  for (const [id, lvl] of level) {
+    if (!byLevel.has(lvl)) byLevel.set(lvl, []);
+    byLevel.get(lvl)!.push(id);
+  }
+
+  // Compute cumulative Y per level (based on tallest node in that level)
+  const levels = [...byLevel.keys()].sort((a, b) => a - b);
+  const levelY: number[] = [];
+  let curY = 40;
+  for (const lvl of levels) {
+    levelY[lvl] = curY;
+    const maxH = Math.max(...(byLevel.get(lvl) ?? []).map((id) => getTableHeight(nodeMap.get(id)?.columns ?? [])));
+    curY += maxH + GAP_Y;
+  }
+
+  // Place nodes: centered horizontally within each level
+  const rfNodes: Node[] = [];
+  for (const lvl of levels) {
+    const group = byLevel.get(lvl) ?? [];
+    const totalW = group.length * TABLE_W + (group.length - 1) * GAP_X;
+    const startX = Math.max(40, 40 + (Math.max(...levels.map((l) => (byLevel.get(l)?.length ?? 0))) * (TABLE_W + GAP_X) - totalW) / 2);
+
+    group.forEach((id, i) => {
+      const n = nodeMap.get(id)!;
+      const h = getTableHeight(n.columns);
+      rfNodes.push({
+        id: n.id,
+        type: "tableNode",
+        position: { x: startX + i * (TABLE_W + GAP_X), y: levelY[lvl] },
+        data: { label: n.label, columns: n.columns },
+        style: { width: TABLE_W, height: h },
+      });
     });
   }
 
-  return nodes;
+  return rfNodes;
 }
 
 function FitViewButton() {
   const { fitView } = useReactFlow();
   return (
-    <ControlButton onClick={() => fitView({ padding: 0.2 })} title="Fit view">
+    <ControlButton onClick={() => fitView({ padding: 0.15 })} title="Fit view">
       <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
         <rect x="1" y="1" width="10" height="10" rx="1" stroke="currentColor" strokeWidth="1.5" />
       </svg>
@@ -188,7 +239,6 @@ export const ERDiagram = forwardRef<DiagramRef, { nodes: ERNodeData[]; edges: ER
       },
     }));
 
-    // Deduplicate nodes
     const seen = new Set<string>();
     const uniqueNodes = rawNodes.filter((n) => {
       if (seen.has(n.id)) return false;
@@ -196,8 +246,8 @@ export const ERDiagram = forwardRef<DiagramRef, { nodes: ERNodeData[]; edges: ER
       return true;
     });
 
-    const nodeIds = new Set(uniqueNodes.map((n) => n.id));
-    const rfNodes = computeLayout(uniqueNodes);
+    const nodeIds  = new Set(uniqueNodes.map((n) => n.id));
+    const rfNodes  = computeLayout(uniqueNodes, rawEdges);
 
     const rfEdges: Edge[] = rawEdges
       .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target) && e.source !== e.target)
@@ -205,11 +255,14 @@ export const ERDiagram = forwardRef<DiagramRef, { nodes: ERNodeData[]; edges: ER
         id: e.id,
         source: e.source,
         target: e.target,
+        type: "smoothstep",
         label: e.label || "",
-        markerEnd: { type: MarkerType.ArrowClosed, color: "#f59e0b" },
-        style: { stroke: "#f59e0b", strokeWidth: 1.5, opacity: 0.7 },
-        labelStyle: { fill: "#fbbf24", fontSize: 10, fontWeight: 600 },
-        labelBgStyle: { fill: "#0f172a", fillOpacity: 0.9 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: "#f59e0b", width: 14, height: 14 },
+        style: { stroke: "#f59e0b", strokeWidth: 1.2, opacity: 0.6 },
+        labelStyle: { fill: "#fbbf24", fontSize: 10, fontWeight: 700 },
+        labelBgStyle: { fill: "#0f172a", fillOpacity: 0.92 },
+        labelBgPadding: [4, 3] as [number, number],
+        labelBgBorderRadius: 3,
       }));
 
     const [nodes, , onNodesChange] = useNodesState(rfNodes);
@@ -224,16 +277,15 @@ export const ERDiagram = forwardRef<DiagramRef, { nodes: ERNodeData[]; edges: ER
           onEdgesChange={onEdgesChange}
           nodeTypes={nodeTypes}
           fitView
-          fitViewOptions={{ padding: 0.2 }}
+          fitViewOptions={{ padding: 0.15 }}
+          minZoom={0.1}
+          proOptions={{ hideAttribution: true }}
         >
-          <Background color="#1a2030" gap={24} size={1} />
+          <Background color="#1a2030" gap={28} size={1} variant={"dots" as any} />
           <Controls showFitView={false}>
             <FitViewButton />
           </Controls>
-          <MiniMap
-            nodeColor={() => "#78350f"}
-            style={{ background: "#0f172a" }}
-          />
+          <MiniMap nodeColor={() => "#78350f"} maskColor="rgba(0,0,0,0.6)" style={{ background: "#0f172a", border: "1px solid #1e293b" }} />
         </ReactFlow>
       </div>
     );
