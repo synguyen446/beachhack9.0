@@ -2,8 +2,6 @@
 
 **AI-powered software project blueprint generator.** Describe your idea, get back a full set of production-ready documentation — requirements, architecture, data model, API spec, DevOps pipeline, testing strategy, and a React UI starter — in minutes.
 
-Built at **BeachHack 9.0** (CSULB).
-
 ---
 
 ## Features
@@ -99,7 +97,7 @@ All variables live in `backend/.env`.
 ## Project Structure
 
 ```
-beachhack9.0/
+DocGenix/
 ├── backend/
 │   ├── agents/
 │   │   ├── base.py              # BaseAgent (ReAct + LangGraph)
