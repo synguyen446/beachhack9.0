@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -157,7 +157,7 @@ function IconSidebarToggle({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-export default function Home() {
+function Home() {
   const [idea, setIdea] = useState("");
   const [contextReady, setContextReady] = useState(false);
   const [projectId, setProjectId] = useState<number | null>(null);
@@ -1504,5 +1504,13 @@ export default function Home() {
         })()}
       </div>
     </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense>
+      <Home />
+    </Suspense>
   );
 }
