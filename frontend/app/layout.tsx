@@ -21,7 +21,32 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
-      <body suppressHydrationWarning className="h-full">{children}</body>
+      <body suppressHydrationWarning className="h-full">
+        {children}
+        <div id="small-screen-guard" aria-hidden="true">
+          <p>This app is best viewed and used on desktop.</p>
+        </div>
+        <style>{`
+          #small-screen-guard {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: #070d1a;
+            color: #f1f5f9;
+            font-family: var(--font-inter), system-ui, sans-serif;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 2rem;
+            font-size: 1.1rem;
+            line-height: 1.6;
+          }
+          @media (max-width: 1919px), (max-height: 1079px) {
+            #small-screen-guard { display: flex; }
+          }
+        `}</style>
+      </body>
     </html>
   );
 }
