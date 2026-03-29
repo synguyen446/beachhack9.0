@@ -169,26 +169,49 @@ function buildGraphData(rawNodes: ArchNode[], rawEdges: ArchEdge[]) {
     .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target) && e.source !== e.target)
     .map((e) => ({ source: e.source, target: e.target, label: e.label }));
 
-  // Post-process: connect isolated nodes (no edges) to the most-connected node
-  const degree = new Map<string, number>();
-  for (const n of nodes) degree.set(n.id, 0);
+  // Post-process: detect all connected components (undirected) and wire
+  // each disconnected sub-graph to the main component via its local hub.
+  const adj = new Map<string, Set<string>>();
+  for (const n of nodes) adj.set(n.id, new Set());
   for (const l of links) {
-    degree.set(l.source, (degree.get(l.source) ?? 0) + 1);
-    degree.set(l.target, (degree.get(l.target) ?? 0) + 1);
+    adj.get(l.source)?.add(l.target);
+    adj.get(l.target)?.add(l.source);
   }
-  const hub = [...degree.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-  if (hub) {
-    for (const n of nodes) {
-      if ((degree.get(n.id) ?? 0) === 0 && n.id !== hub) {
-        // Consumers (frontend) point TO hub; databases/external receive FROM hub
-        const isConsumer = n.node_type === "frontend";
-        const isLeaf     = n.node_type === "database" || n.node_type === "external";
-        links.push(
-          isConsumer ? { source: n.id, target: hub, label: "" }
-          : isLeaf   ? { source: hub,  target: n.id, label: "" }
-                     : { source: n.id, target: hub, label: "" }
-        );
+
+  const visited = new Set<string>();
+  const components: string[][] = [];
+  for (const n of nodes) {
+    if (visited.has(n.id)) continue;
+    const comp: string[] = [];
+    const queue = [n.id];
+    while (queue.length) {
+      const cur = queue.shift()!;
+      if (visited.has(cur)) continue;
+      visited.add(cur);
+      comp.push(cur);
+      for (const nb of adj.get(cur) ?? []) {
+        if (!visited.has(nb)) queue.push(nb);
       }
+    }
+    components.push(comp);
+  }
+
+  if (components.length > 1) {
+    // Degree within full link set
+    const degree = new Map<string, number>();
+    for (const n of nodes) degree.set(n.id, 0);
+    for (const l of links) {
+      degree.set(l.source, (degree.get(l.source) ?? 0) + 1);
+      degree.set(l.target, (degree.get(l.target) ?? 0) + 1);
+    }
+    // Main component = largest
+    const mainComp = components.sort((a, b) => b.length - a.length)[0];
+    const mainHub  = mainComp.sort((a, b) => (degree.get(b) ?? 0) - (degree.get(a) ?? 0))[0];
+
+    for (let i = 1; i < components.length; i++) {
+      const comp    = components[i];
+      const compHub = comp.sort((a, b) => (degree.get(b) ?? 0) - (degree.get(a) ?? 0))[0];
+      links.push({ source: compHub, target: mainHub, label: "" });
     }
   }
 
